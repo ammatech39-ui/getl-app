@@ -1,0 +1,3949 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<meta name="description" content="نظام متابعة كراء الآلات — إدارة شهرية احترافية"/>
+<title>كراء الآلات</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js">
+
+// Easier horizontal drag for monthly table
+(function(){
+  function enableDragScroll(el){
+    if(!el) return;
+    let down=false,startX=0,startLeft=0;
+    el.addEventListener('mousedown',function(e){
+      if(e.target.closest('input,button,select,textarea,label,a')) return;
+      down=true;
+      el.classList.add('dragging');
+      startX=e.pageX;
+      startLeft=el.scrollLeft;
+    });
+    window.addEventListener('mouseup',function(){
+      down=false;
+      el.classList.remove('dragging');
+    });
+    el.addEventListener('mouseleave',function(){
+      down=false;
+      el.classList.remove('dragging');
+    });
+    el.addEventListener('mousemove',function(e){
+      if(!down) return;
+      e.preventDefault();
+      const walk=(e.pageX-startX)*1.15;
+      el.scrollLeft=startLeft-walk;
+    });
+  }
+  window.addEventListener('load',function(){
+    const firstTableWrap=document.querySelector('.tw');
+    enableDragScroll(firstTableWrap);
+  });
+})();
+
+
+
+// Stronger hand-drag scrolling for monthly table
+(function(){
+  function attachDragScroll(el){
+    if(!el || el.dataset.dragBound==='1') return;
+    el.dataset.dragBound='1';
+    el.classList.add('drag-scroll-ready');
+    let isDown=false, startX=0, startLeft=0;
+
+    function canIgnore(target){
+      return !!target.closest('input,button,select,textarea,a,label');
+    }
+
+    el.addEventListener('mousedown', function(e){
+      if(canIgnore(e.target)) return;
+      isDown=true;
+      el.classList.add('dragging');
+      startX=e.clientX;
+      startLeft=el.scrollLeft;
+      e.preventDefault();
+    });
+
+    window.addEventListener('mouseup', function(){
+      isDown=false;
+      el.classList.remove('dragging');
+    });
+
+    el.addEventListener('mousemove', function(e){
+      if(!isDown) return;
+      const dx=e.clientX-startX;
+      el.scrollLeft=startLeft-dx*1.35;
+    });
+
+    el.addEventListener('touchstart', function(){
+      el.classList.add('dragging');
+    }, {passive:true});
+    el.addEventListener('touchend', function(){
+      el.classList.remove('dragging');
+    }, {passive:true});
+  }
+
+  function bindMonthlyWrap(){
+    const candidates = Array.from(document.querySelectorAll('.tw'));
+    let best = document.getElementById('monthWrap');
+    if(!best){
+      best = candidates.find(el => el.querySelector('table')) || candidates[0];
+    }
+    if(best) attachDragScroll(best);
+  }
+
+  window.addEventListener('load', bindMonthlyWrap);
+  const _oldGoTo = window.goTo;
+  if(typeof _oldGoTo === 'function'){
+    window.goTo = function(id, btn){
+      _oldGoTo.apply(this, arguments);
+      setTimeout(bindMonthlyWrap, 200);
+    };
+  }
+  setTimeout(bindMonthlyWrap, 600);
+})();
+
+</script>
+<style>
+/* ============================================================
+   DESIGN TOKENS
+   ============================================================ */
+:root {
+  /* Brand palette — deep teal + warm sand */
+  --brand:     #0a5c60;
+  --brand-dk:  #073f42;
+  --brand-lg:  #0d7a80;
+  --brand-xl:  #e6f4f4;
+  --accent:    #e07b1a;
+  --accent-lt: #fff4e3;
+  --accent-dk: #b55e0a;
+
+  /* Neutrals */
+  --bg:        #f5f2ec;
+  --surface:   #ffffff;
+  --surface2:  #f0ede5;
+  --border:    #ddd8cf;
+  --border-lt: #eae6de;
+  --text:      #1a1714;
+  --text-md:   #4a4540;
+  --text-muted:#7a7268;
+
+  /* Semantic colours */
+  --green:     #16a34a; --green-lt:#dcfce7; --green-dk:#14532d;
+  --amber:     #d97706; --amber-lt:#fef3c7; --amber-dk:#92400e;
+  --red:       #dc2626; --red-lt:#fee2e2;   --red-dk:#7f1d1d;
+  --blue:      #2563eb; --blue-lt:#dbeafe;  --blue-dk:#1e3a8a;
+
+  /* Cell states */
+  --c-zero:    #fee2e2; --c-zero-b:#fca5a5;
+  --c-part:    #d1fae5; --c-part-b:#6ee7b7;
+  --c-full:    #a7f3d0; --c-full-b:#34d399;
+  --c-extra:   #dbeafe; --c-extra-b:#93c5fd;
+
+  /* Radii & shadows */
+  --r:         12px;
+  --r-sm:      8px;
+  --r-lg:      16px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+  --shadow:    0 4px 16px rgba(0,0,0,.08), 0 1px 4px rgba(0,0,0,.04);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,.12), 0 4px 12px rgba(0,0,0,.06);
+
+  /* Sidebar width */
+  --sidebar-w: 230px;
+
+  /* Transitions */
+  --tr: .15s ease;
+  --tr-md: .25s ease;
+}
+
+/* ============================================================
+   RESET & BASE
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Cairo', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============================================================
+   LAYOUT
+   ============================================================ */
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  min-height: 100vh;
+}
+
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+.sidebar {
+  background: linear-gradient(180deg, var(--brand-dk) 0%, var(--brand) 100%);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 0;
+  box-shadow: 2px 0 16px rgba(0,0,0,.15);
+}
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 2px; }
+
+.brand {
+  padding: 20px 18px 16px;
+  border-bottom: 1px solid rgba(255,255,255,.1);
+  margin-bottom: 6px;
+}
+.brand-title {
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: -.3px;
+  line-height: 1.2;
+}
+.brand-sub {
+  font-size: 10px;
+  opacity: .45;
+  font-weight: 400;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.brand-dot {
+  width: 6px; height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.nav-section { padding: 6px 12px 2px; }
+.nav-lbl {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  opacity: .35;
+  padding: 0 6px 4px;
+}
+.nav { display: flex; flex-direction: column; gap: 1px; }
+.nav button {
+  width: 100%;
+  text-align: right;
+  border: none;
+  background: transparent;
+  color: rgba(255,255,255,.7);
+  padding: 9px 10px;
+  border-radius: var(--r-sm);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  transition: var(--tr);
+  position: relative;
+}
+.nav button:hover {
+  background: rgba(255,255,255,.1);
+  color: #fff;
+}
+.nav button.active {
+  background: rgba(255,255,255,.18);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.nav-ico { font-size: 15px; flex-shrink: 0; }
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 12px 14px;
+  border-top: 1px solid rgba(255,255,255,.1);
+  font-size: 10px;
+  opacity: .3;
+  text-align: center;
+}
+
+/* ============================================================
+   MAIN CONTENT
+   ============================================================ */
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  min-width: 0;
+}
+
+/* ============================================================
+   TOP BAR
+   ============================================================ */
+.topbar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 11px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  box-shadow: var(--shadow-sm);
+}
+.topbar-title { font-size: 18px; font-weight: 800; letter-spacing: -.3px; }
+.topbar-sub { color: var(--text-muted); font-size: 11px; margin-top: 1px; }
+.topbar-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+.btn {
+  border: none;
+  border-radius: var(--r-sm);
+  padding: 8px 13px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: var(--tr);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.btn:hover { filter: brightness(.93); transform: translateY(-1px); }
+.btn:active { transform: translateY(0); filter: brightness(.88); }
+.btn-primary { background: var(--brand); color: #fff; }
+.btn-accent  { background: var(--accent); color: #fff; }
+.btn-green   { background: var(--green-lt); color: var(--green-dk); border: 1px solid #86efac; }
+.btn-danger  { background: var(--red-lt); color: var(--red-dk); border: 1px solid #fca5a5; }
+.btn-light   { background: var(--surface2); border: 1px solid var(--border); color: var(--text-md); }
+.btn-ghost   { background: transparent; border: 1px solid var(--border); color: var(--text-md); }
+.btn-sm      { padding: 5px 9px; font-size: 11.5px; border-radius: 7px; }
+.btn-xs      { padding: 3px 7px; font-size: 10.5px; border-radius: 6px; }
+
+/* zoom control */
+.zoom-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 2px 4px;
+}
+.zoom-ctrl span {
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 36px;
+  text-align: center;
+}
+
+/* ============================================================
+   STAT CARDS
+   ============================================================ */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.scard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 13px 15px;
+  box-shadow: var(--shadow-sm);
+  transition: var(--tr-md);
+  position: relative;
+  overflow: hidden;
+}
+.scard::before {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--brand);
+  border-radius: 0 var(--r) var(--r) 0;
+}
+.scard:nth-child(2)::before { background: var(--brand-lg); }
+.scard:nth-child(3)::before { background: var(--accent); }
+.scard:nth-child(4)::before { background: var(--green); }
+.scard:hover { box-shadow: var(--shadow); transform: translateY(-2px); }
+.scard .lbl { font-size: 11px; color: var(--text-muted); margin-bottom: 5px; font-weight: 600; }
+.scard .val { font-size: 22px; font-weight: 900; letter-spacing: -.5px; }
+.scard .note { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
+
+/* ============================================================
+   PANEL
+   ============================================================ */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.ph {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-lt);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: var(--surface2);
+}
+.ph h2 { font-size: 14px; font-weight: 700; }
+.ph .sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.pb { padding: 13px 16px; }
+
+/* Two-column dashboard layout */
+.pg {
+  display: grid;
+  grid-template-columns: 1fr 256px;
+  gap: 12px;
+  align-items: start;
+}
+
+/* ============================================================
+   DATE NAVIGATION
+   ============================================================ */
+.dnav {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  background: var(--brand-xl);
+  border: 1px solid #b2d8d8;
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+.dnav-g {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 100px;
+}
+.dnav-g label { font-size: 10px; color: var(--brand); font-weight: 700; }
+.dnav-g select {
+  padding: 7px 10px;
+  border: 1px solid #b2d8d8;
+  border-radius: 7px;
+  background: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--brand-dk);
+}
+.dnav-btns { display: flex; gap: 5px; align-items: flex-end; }
+.arr {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: var(--tr);
+  line-height: 1;
+}
+.arr:hover { background: var(--brand-xl); border-color: var(--brand); }
+
+/* ============================================================
+   FILTERS
+   ============================================================ */
+.frow {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  background: var(--surface2);
+  border: 1px solid var(--border-lt);
+  border-radius: var(--r-sm);
+  padding: 10px;
+  margin-bottom: 8px;
+}
+.ctrl {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 100px;
+}
+.ctrl label { font-size: 10px; color: var(--text-muted); font-weight: 600; }
+
+/* Inputs & Selects */
+input, select {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #fff;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text);
+  transition: var(--tr);
+}
+input:focus, select:focus {
+  outline: 2px solid var(--brand);
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(10,92,96,.1);
+}
+
+/* ============================================================
+   VIEW TABS
+   ============================================================ */
+.vtabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.vt {
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  transition: var(--tr);
+  user-select: none;
+}
+.vt:hover { background: var(--border-lt); }
+.vt.active { background: var(--brand); color: #fff; border-color: var(--brand); }
+
+/* ============================================================
+   BANNER
+   ============================================================ */
+.banner {
+  background: var(--amber-lt);
+  border: 1px solid #fde68a;
+  border-radius: var(--r-sm);
+  padding: 7px 12px;
+  font-size: 12px;
+  margin-bottom: 8px;
+  display: none;
+}
+
+/* ============================================================
+   TABLE
+   ============================================================ */
+.tw {
+  overflow: auto;
+  border: 1px solid var(--border-lt);
+  border-radius: var(--r-sm);
+  max-height: 54vh;
+}
+.tw::-webkit-scrollbar { width: 6px; height: 6px; }
+.tw::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+table { width: 100%; border-collapse: collapse; background: #fff; }
+th, td {
+  border-bottom: 1px solid var(--border-lt);
+  padding: 5px 4px;
+  text-align: center;
+  font-size: 11.5px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+th {
+  position: sticky;
+  top: 0;
+  background: var(--surface2);
+  color: var(--text-muted);
+  z-index: 1;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .3px;
+}
+tr:hover td { background: rgba(10,92,96,.02); }
+
+td.sc, th.sc { position: sticky; z-index: 2; }
+th.sc { z-index: 3; background: var(--surface2); }
+td.sc { background: #fff; }
+tr:hover td.sc { background: #f8fffe; }
+
+td:nth-child(1), th:nth-child(1) { right: 0; min-width: 148px; text-align: right; }
+td:nth-child(2), th:nth-child(2) { right: 148px; min-width: 145px; text-align: right; }
+
+.mname { font-weight: 700; font-size: 12px; }
+.ss { font-size: 10px; color: var(--text-muted); }
+
+/* Hour input cell */
+.hi {
+  width: 34px;
+  padding: 3px 1px;
+  text-align: center;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  font-weight: 700;
+  font-family: inherit;
+  font-size: 11px;
+  background: transparent;
+  transition: var(--tr);
+}
+.hi:focus { outline: 2px solid var(--brand); }
+
+td.c0 .hi { background: var(--c-zero); border-color: var(--c-zero-b); color: var(--red); }
+td.cp .hi { background: var(--c-part); border-color: var(--c-part-b); color: var(--green-dk); }
+td.cf .hi { background: var(--c-full); border-color: var(--c-full-b); color: var(--green-dk); }
+td.cx .hi { background: var(--c-extra); border-color: var(--c-extra-b); color: var(--blue-dk); }
+
+td.agg { background: var(--surface2); font-weight: 600; }
+tfoot td, tfoot th {
+  background: #edeae2;
+  font-weight: 800;
+  position: sticky;
+  bottom: 0;
+  font-size: 11px;
+}
+.gh {
+  background: var(--brand-xl);
+  color: var(--brand-dk);
+  font-weight: 800;
+  font-size: 11px;
+  text-align: right;
+  padding: 6px 12px;
+  border-bottom: 2px solid var(--brand);
+}
+
+/* Hour distribution bar */
+.hbar { display: flex; gap: 2px; }
+.hbar span { padding: 1px 4px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+.hb0 { background: var(--c-zero); color: var(--red); }
+.hbp { background: var(--c-part); color: var(--green-dk); }
+.hbf { background: var(--c-full); color: var(--green-dk); }
+.hbx { background: var(--c-extra); color: var(--blue-dk); }
+
+/* ============================================================
+   SUMMARY SIDEBAR
+   ============================================================ */
+.sb {
+  background: var(--surface2);
+  border: 1px solid var(--border-lt);
+  border-radius: var(--r-sm);
+  padding: 9px 11px;
+  margin-bottom: 6px;
+}
+.sb .bg {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--brand-xl);
+  color: var(--brand);
+  font-size: 9.5px;
+  font-weight: 700;
+  margin-bottom: 3px;
+  letter-spacing: .3px;
+}
+.sb strong { display: block; font-size: 14px; font-weight: 800; }
+.tl { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ============================================================
+   LIBRARY GRID (sites, managers, machines)
+   ============================================================ */
+.lgrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.lcard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 14px;
+  transition: var(--tr-md);
+}
+.lcard:hover { box-shadow: var(--shadow); transform: translateY(-2px); }
+.lcard .lt { font-size: 10px; color: var(--text-muted); font-weight: 600; }
+.lcard .ln { font-size: 15px; font-weight: 800; color: var(--brand); margin-top: 2px; }
+.lcard .lm { font-size: 11px; margin-top: 3px; color: var(--text-md); }
+.lcard .lf {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-lt);
+}
+
+.lrow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 13px;
+  background: var(--surface2);
+  border: 1px solid var(--border-lt);
+  border-radius: var(--r-sm);
+  margin-bottom: 5px;
+  transition: var(--tr);
+}
+.lrow[onclick]:hover {
+  background: var(--brand-xl);
+  border-color: var(--brand);
+  transform: translateX(-2px);
+}
+.lrow strong { font-size: 13px; }
+
+.tgrp { margin-bottom: 14px; }
+.tgh {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--brand);
+  margin-bottom: 5px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-lt);
+}
+
+/* Tags */
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--brand-xl);
+  color: var(--brand);
+}
+.tag-o { background: var(--amber-lt); color: var(--amber-dk); }
+.tag-p { background: #ede9fe; color: #5b21b6; }
+.tag-g { background: var(--green-lt); color: var(--green-dk); }
+
+/* ============================================================
+   EXPENSE PAGE
+   ============================================================ */
+.eg { display: grid; grid-template-columns: 1.1fr .9fr; gap: 12px; }
+.mi {
+  background: var(--brand-xl);
+  border: 1px solid #b2d8d8;
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  font-size: 12px;
+  margin-bottom: 7px;
+}
+.mi strong { display: block; margin-bottom: 2px; font-size: 13px; }
+
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
+.empty { text-align: center; padding: 40px 20px; }
+.empty .ico { font-size: 48px; margin-bottom: 12px; }
+.empty h3 { font-size: 17px; margin-bottom: 6px; }
+.empty p { color: var(--text-muted); font-size: 13px; margin-bottom: 16px; }
+
+/* ============================================================
+   MODALS
+   ============================================================ */
+.ov {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(7,31,33,.55);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(3px);
+}
+.ov.open { display: flex; }
+.mbx {
+  background: #fff;
+  border-radius: var(--r-lg);
+  padding: 22px 24px;
+  width: 100%;
+  max-width: 490px;
+  box-shadow: var(--shadow-lg);
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: slideUp .2s ease;
+}
+@keyframes slideUp {
+  from { transform: translateY(12px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+.mbx h3 { font-size: 16px; font-weight: 800; margin-bottom: 16px; color: var(--brand-dk); }
+.mg { display: grid; gap: 10px; }
+.ma { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+.hint { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+.ibanner {
+  background: var(--amber-lt);
+  border: 1px solid #fde68a;
+  border-radius: var(--r-sm);
+  padding: 8px 12px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+/* ============================================================
+   SECTIONS
+   ============================================================ */
+.sec { display: none; }
+.sec.active { display: block; }
+
+/* ============================================================
+   MACHINE TYPE CARDS
+   ============================================================ */
+.type-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+.type-card {
+  padding: 8px 13px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  transition: var(--tr);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 78px;
+}
+.type-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.type-card.active-own  { border-color: var(--green); background: var(--green-lt); }
+.type-card.active-rent { border-color: var(--amber); background: var(--amber-lt); }
+.type-card .tc { font-size: 18px; }
+.type-card .tn { font-size: 11px; }
+.type-card .tcount { font-size: 10px; opacity: .65; }
+
+.mach-list { background: #fff; border: 1px solid var(--border-lt); border-radius: var(--r-sm); padding: 10px; margin-top: 4px; display: none; }
+.mach-list.open { display: block; }
+
+/* ============================================================
+   PAYMENTS
+   ============================================================ */
+.paid-tag {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+/* ============================================================
+   TOAST
+   ============================================================ */
+#toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--green-dk);
+  color: #fff;
+  padding: 11px 18px;
+  border-radius: var(--r-sm);
+  font-family: 'Cairo', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  z-index: 999;
+  box-shadow: var(--shadow-lg);
+  transition: opacity .3s;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .6; }
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.sec.active { animation: fadeIn .2s ease; }
+
+/* ============================================================
+   PRINT
+   ============================================================ */
+@media print {
+  .sidebar, .btns, .topbar-actions, .frow, .vtabs, .ov, .tl, .banner, .dnav-btns {
+    display: none !important;
+  }
+  .app { display: block; }
+  .content { padding: 0; }
+  .panel, .scard { box-shadow: none; border: none; }
+  .tw { max-height: none; overflow: visible; }
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 900px) {
+  :root { --sidebar-w: 52px; }
+  .brand-title, .brand-sub, .nav-lbl, .nav button span { display: none; }
+  .nav button { justify-content: center; padding: 10px; }
+  .nav-ico { font-size: 18px; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .pg { grid-template-columns: 1fr; }
+  .lgrid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+  .stats { grid-template-columns: 1fr 1fr; }
+  .eg { grid-template-columns: 1fr; }
+}
+
+/* ===== LOCK SYSTEM ===== */
+#lockOverlay{display:none;position:fixed;inset:0;background:rgba(7,31,33,.78);z-index:9999;align-items:center;justify-content:center;backdrop-filter:blur(5px);}
+#lockOverlay.open{display:flex;}
+#lockBox{background:#fff;border-radius:16px;padding:34px 28px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,.35);text-align:center;animation:slideUp .25s ease;}
+#lockBox .lk-ico{font-size:50px;margin-bottom:10px;}
+#lockBox h3{font-size:17px;font-weight:800;color:#073f42;margin-bottom:5px;}
+#lockBox p{font-size:12px;color:#7a7268;margin-bottom:18px;}
+#lockPwInput{width:100%;padding:11px 14px;border:2px solid #ddd8cf;border-radius:9px;font-family:Cairo,sans-serif;font-size:18px;text-align:center;letter-spacing:5px;margin-bottom:12px;outline:none;transition:.2s;}
+#lockPwInput:focus{border-color:#0a5c60;box-shadow:0 0 0 3px rgba(10,92,96,.13);}
+#lockPwInput.pw-shake{animation:shake .32s ease;}
+#lockSubmitBtn{width:100%;padding:11px;background:#0a5c60;color:#fff;border:none;border-radius:9px;font-family:Cairo,sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:.2s;margin-bottom:6px;}
+#lockSubmitBtn:hover{background:#073f42;}
+#lockErrMsg{color:#dc2626;font-size:12px;margin-top:4px;min-height:18px;}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+
+/* ╔══════════════════════════════════════════════════════════╗
+   ║         V3 PRO — COMPLETE VISUAL REDESIGN               ║
+   ╚══════════════════════════════════════════════════════════╝ */
+
+/* ── IMPORT BETTER FONT ── */
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap');
+
+/* ── ENHANCED DESIGN TOKENS ── */
+:root {
+  --brand:      #0d7377;
+  --brand-dk:   #085f63;
+  --brand-lg:   #14a3a8;
+  --brand-xl:   #e8f7f7;
+  --brand-mid:  #0a8a8f;
+  --accent:     #f4a261;
+  --accent-dk:  #e07b1a;
+  --accent-lt:  #fef5ec;
+  --bg:         #f0eff5;
+  --surface:    #ffffff;
+  --surface2:   #f7f6fb;
+  --surface3:   #eeedف5;
+  --border:     #e2e0eb;
+  --border-lt:  #eceaf5;
+  --text:       #1a1825;
+  --text-md:    #3d3a50;
+  --text-muted: #8884a0;
+  --text-faint: #c0bdd4;
+  --green:      #10b981;
+  --green-lt:   #d1fae5;
+  --green-dk:   #065f46;
+  --amber:      #f59e0b;
+  --amber-lt:   #fef3c7;
+  --amber-dk:   #78350f;
+  --red:        #ef4444;
+  --red-lt:     #fee2e2;
+  --red-dk:     #7f1d1d;
+  --blue:       #3b82f6;
+  --blue-lt:    #dbeafe;
+  --blue-dk:    #1e3a8a;
+  --purple:     #8b5cf6;
+  --purple-lt:  #ede9fe;
+  --sidebar-w:  240px;
+  --r:    14px;
+  --r-sm: 10px;
+  --r-lg: 18px;
+  --r-xl: 24px;
+  --shadow-sm: 0 1px 3px rgba(13,115,119,.08), 0 1px 2px rgba(0,0,0,.04);
+  --shadow:    0 4px 20px rgba(13,115,119,.10), 0 2px 8px rgba(0,0,0,.04);
+  --shadow-lg: 0 16px 48px rgba(13,115,119,.14), 0 6px 16px rgba(0,0,0,.06);
+  --shadow-accent: 0 4px 20px rgba(244,162,97,.3);
+  --tr: .18s cubic-bezier(.16,1,.3,1);
+  --tr-md: .28s cubic-bezier(.16,1,.3,1);
+}
+
+/* ── DARK MODE ── */
+[data-theme="dark"] {
+  --brand:      #2dd4bf;
+  --brand-dk:   #14b8a6;
+  --brand-lg:   #5eead4;
+  --brand-xl:   #0d2d2d;
+  --brand-mid:  #0f766e;
+  --accent:     #fb923c;
+  --accent-dk:  #ea580c;
+  --accent-lt:  #2c1a0a;
+  --bg:         #0f0e17;
+  --surface:    #1a1825;
+  --surface2:   #221f30;
+  --border:     #2e2b40;
+  --border-lt:  #252235;
+  --text:       #e8e6f0;
+  --text-md:    #b4b0c8;
+  --text-muted: #6b6880;
+  --text-faint: #3d3a50;
+  --green:      #34d399;
+  --green-lt:   #0a2a1e;
+  --green-dk:   #6ee7b7;
+  --amber:      #fbbf24;
+  --amber-lt:   #1c1408;
+  --amber-dk:   #fde68a;
+  --red:        #f87171;
+  --red-lt:     #1c0a0a;
+  --red-dk:     #fca5a5;
+  --blue:       #60a5fa;
+  --blue-lt:    #0a1628;
+  --blue-dk:    #93c5fd;
+  --purple:     #a78bfa;
+  --purple-lt:  #150d2a;
+  --c-zero:   #2d0f0f; --c-zero-b: #7f1d1d;
+  --c-part:   #0a2a1e; --c-part-b: #166534;
+  --c-full:   #0f3020; --c-full-b: #16a34a;
+  --c-extra:  #0a1628; --c-extra-b: #1d4ed8;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.4);
+  --shadow:    0 4px 20px rgba(0,0,0,.5);
+  --shadow-lg: 0 16px 48px rgba(0,0,0,.6);
+}
+
+body {
+  font-family: 'Cairo', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  transition: background .3s ease, color .3s ease;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ══════════════════════════════════════
+   SIDEBAR — Complete Redesign
+══════════════════════════════════════ */
+.sidebar {
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: 4px 0 24px rgba(0,0,0,.06);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.brand {
+  padding: 20px 16px 16px;
+  border-bottom: 1px solid var(--border-lt);
+  margin-bottom: 0;
+}
+.brand-logo {
+  width: 38px; height: 38px;
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-lg) 100%);
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(13,115,119,.3);
+}
+.brand-title {
+  font-size: 14px; font-weight: 800;
+  color: var(--text); letter-spacing: -.3px;
+}
+.brand-sub {
+  font-size: 10px; color: var(--text-muted);
+  margin-top: 2px;
+}
+.brand-dot { background: var(--brand); }
+
+.nav-lbl {
+  font-size: 9px; font-weight: 800;
+  letter-spacing: 1.8px; text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 0 16px 5px;
+}
+.nav button {
+  color: var(--text-muted);
+  border-radius: 10px;
+  margin: 0 8px;
+  width: calc(100% - 16px);
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  gap: 10px;
+}
+.nav button:hover {
+  background: var(--brand-xl);
+  color: var(--brand);
+}
+.nav button.active {
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-lg) 100%);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(13,115,119,.35);
+}
+[data-theme="dark"] .nav button.active {
+  box-shadow: 0 4px 14px rgba(45,212,191,.2);
+}
+.nav button.active .nav-ico { filter: none; }
+.nav-ico { font-size: 16px; }
+
+.sidebar-footer {
+  background: var(--surface2);
+  border-top: 1px solid var(--border-lt);
+  padding: 12px 16px;
+  font-size: 10px; color: var(--text-faint);
+  opacity: 1;
+}
+
+/* ══════════════════════════════════════
+   TOPBAR — Redesigned
+══════════════════════════════════════ */
+.topbar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 12px 18px;
+  box-shadow: var(--shadow-sm);
+  position: sticky; top: 0; z-index: 50;
+}
+.topbar-title {
+  font-size: 18px; font-weight: 900;
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-lg) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -.4px;
+}
+.topbar-sub { color: var(--text-muted); font-size: 11px; margin-top: 1px; }
+
+/* ══════════════════════════════════════
+   STAT CARDS — Premium design
+══════════════════════════════════════ */
+.stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
+
+.scard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+  transition: var(--tr-md);
+  position: relative; overflow: hidden;
+  cursor: default;
+}
+.scard::before { display: none; }
+.scard::after {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--brand) 0%, var(--brand-lg) 100%);
+  border-radius: var(--r) var(--r) 0 0;
+}
+.scard:nth-child(2)::after { background: linear-gradient(90deg, var(--accent-dk) 0%, var(--accent) 100%); }
+.scard:nth-child(3)::after { background: linear-gradient(90deg, var(--green) 0%, #34d399 100%); }
+.scard:nth-child(4)::after { background: linear-gradient(90deg, var(--purple) 0%, #a78bfa 100%); }
+.scard:hover {
+  box-shadow: var(--shadow);
+  transform: translateY(-3px);
+}
+.scard .lbl {
+  font-size: 11px; font-weight: 700;
+  color: var(--text-muted); margin-bottom: 8px;
+  text-transform: uppercase; letter-spacing: .5px;
+}
+.scard .val {
+  font-size: 24px; font-weight: 900;
+  letter-spacing: -.8px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.scard .note {
+  font-size: 10.5px; color: var(--text-muted);
+  margin-top: 5px; display: flex; align-items: center; gap: 4px;
+}
+
+/* ══════════════════════════════════════
+   PANEL — Redesigned
+══════════════════════════════════════ */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.ph {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-lt);
+  background: var(--surface);
+}
+.ph h2 { font-size: 14px; font-weight: 800; color: var(--text); }
+.ph .sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.pb { padding: 14px 18px; }
+
+/* ══════════════════════════════════════
+   BUTTONS — Premium
+══════════════════════════════════════ */
+.btn {
+  border: none; border-radius: 10px;
+  padding: 8px 14px; cursor: pointer;
+  font-family: 'Cairo', sans-serif; font-size: 12.5px; font-weight: 700;
+  transition: var(--tr);
+  display: inline-flex; align-items: center; gap: 6px;
+  white-space: nowrap; position: relative; overflow: hidden;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(0) scale(.98); }
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-lg) 100%);
+  color: #fff;
+  box-shadow: 0 3px 12px rgba(13,115,119,.3);
+}
+.btn-primary:hover { box-shadow: 0 6px 20px rgba(13,115,119,.4); }
+
+.btn-accent {
+  background: linear-gradient(135deg, var(--accent-dk) 0%, var(--accent) 100%);
+  color: #fff;
+  box-shadow: 0 3px 12px rgba(244,162,97,.3);
+}
+.btn-accent:hover { box-shadow: 0 6px 20px rgba(244,162,97,.45); }
+
+.btn-green {
+  background: var(--green-lt);
+  color: var(--green-dk);
+  border: 1px solid rgba(16,185,129,.3);
+}
+.btn-green:hover { background: #a7f3d0; }
+
+.btn-danger {
+  background: var(--red-lt);
+  color: var(--red-dk);
+  border: 1px solid rgba(239,68,68,.25);
+}
+.btn-light {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-md);
+}
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-md);
+}
+.btn-sm  { padding: 5px 10px; font-size: 11.5px; border-radius: 8px; }
+.btn-xs  { padding: 3px 7px;  font-size: 10.5px; border-radius: 7px; }
+
+/* ══════════════════════════════════════
+   TABLE — Premium
+══════════════════════════════════════ */
+.tw {
+  overflow: auto;
+  border: 1px solid var(--border-lt);
+  border-radius: var(--r-sm);
+  max-height: 54vh;
+}
+table { background: var(--surface); }
+th {
+  background: var(--surface2);
+  color: var(--text-muted);
+  font-size: 10px; font-weight: 800;
+  letter-spacing: .5px; text-transform: uppercase;
+}
+tr:hover td { background: rgba(13,115,119,.025); }
+tfoot td, tfoot th {
+  background: var(--surface2);
+  font-weight: 800;
+}
+[data-theme="dark"] tfoot td,
+[data-theme="dark"] tfoot th { background: #1a1825; }
+.gh {
+  background: var(--brand-xl);
+  color: var(--brand-dk);
+  font-weight: 800; font-size: 11px;
+  text-align: right; padding: 7px 14px;
+  border-bottom: 2px solid var(--brand);
+}
+[data-theme="dark"] .gh { background: #0d2d2d; color: var(--brand); }
+
+/* ══════════════════════════════════════
+   INPUTS — Redesigned
+══════════════════════════════════════ */
+input, select {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-family: 'Cairo', sans-serif;
+  transition: var(--tr);
+}
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(13,115,119,.12);
+}
+
+/* ══════════════════════════════════════
+   SUMMARY SIDEBAR BOXES
+══════════════════════════════════════ */
+.sb {
+  background: var(--surface2);
+  border: 1px solid var(--border-lt);
+  border-radius: var(--r-sm);
+  padding: 10px 13px; margin-bottom: 8px;
+}
+.sb .bg {
+  background: var(--brand-xl);
+  color: var(--brand);
+  font-size: 9.5px; font-weight: 800;
+  padding: 2px 9px; border-radius: 999px;
+  margin-bottom: 4px; display: inline-block;
+}
+[data-theme="dark"] .sb .bg { background: #0d2d2d; }
+
+/* ══════════════════════════════════════
+   LIBRARY CARDS
+══════════════════════════════════════ */
+.lcard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 15px;
+  transition: var(--tr-md);
+}
+.lcard:hover {
+  box-shadow: var(--shadow);
+  transform: translateY(-3px);
+  border-color: var(--brand);
+}
+.lcard .ln { color: var(--brand); font-size: 15px; font-weight: 800; }
+
+.lrow {
+  background: var(--surface2);
+  border: 1px solid var(--border-lt);
+  border-radius: 10px;
+  transition: var(--tr);
+}
+.lrow:hover {
+  background: var(--brand-xl);
+  border-color: var(--brand);
+  transform: translateX(-3px);
+}
+[data-theme="dark"] .lrow:hover { background: #0d2d2d; }
+
+/* ══════════════════════════════════════
+   TAGS / BADGES
+══════════════════════════════════════ */
+.tag { background: var(--brand-xl); color: var(--brand); font-weight: 700; }
+[data-theme="dark"] .tag { background: #0d2d2d; }
+
+/* ══════════════════════════════════════
+   MODALS — Premium
+══════════════════════════════════════ */
+.ov { backdrop-filter: blur(6px); background: rgba(15,14,23,.6); }
+.mbx {
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  padding: 24px 26px;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border);
+}
+.mbx h3 {
+  font-size: 17px; font-weight: 900;
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-lg) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text; margin-bottom: 18px;
+}
+
+/* ══════════════════════════════════════
+   VIEW TABS — Pill style
+══════════════════════════════════════ */
+.vt {
+  border-radius: 999px;
+  font-size: 11.5px; font-weight: 600;
+  padding: 5px 13px;
+  border: 1.5px solid var(--border);
+  background: var(--surface); color: var(--text-muted);
+}
+.vt:hover { background: var(--brand-xl); color: var(--brand); border-color: var(--brand); }
+.vt.active {
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-lg) 100%);
+  color: #fff; border-color: transparent;
+  box-shadow: 0 3px 10px rgba(13,115,119,.3);
+}
+
+/* ══════════════════════════════════════
+   DATE NAV
+══════════════════════════════════════ */
+.dnav {
+  background: var(--brand-xl);
+  border: 1.5px solid rgba(13,115,119,.2);
+  border-radius: var(--r-sm);
+}
+[data-theme="dark"] .dnav { background: #0d2d2d; border-color: rgba(45,212,191,.2); }
+.dnav-g label { color: var(--brand); font-weight: 800; }
+.dnav-g select { border-color: rgba(13,115,119,.25); color: var(--brand); font-weight: 800; }
+.arr:hover { background: var(--brand); color: #fff; border-color: var(--brand); }
+
+/* ══════════════════════════════════════
+   TOAST — Premium
+══════════════════════════════════════ */
+#toast {
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-lg) 100%);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255,255,255,.1);
+  font-weight: 700; font-size: 13px;
+  bottom: 24px; left: 24px;
+}
+
+/* ══════════════════════════════════════
+   LOCK OVERLAY
+══════════════════════════════════════ */
+#lockBox {
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+}
+#lockBox h3 {
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-lg) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+#lockSubmitBtn {
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-lg) 100%);
+  box-shadow: 0 4px 14px rgba(13,115,119,.35);
+  border-radius: 10px;
+}
+#lockPwInput { border-radius: 10px; }
+
+/* ══════════════════════════════════════
+   TYPE CARDS
+══════════════════════════════════════ */
+.type-card { border-radius: 12px; }
+.type-card:hover { border-color: var(--brand); background: var(--brand-xl); }
+.type-card.active-own  { border-color: var(--green); background: var(--green-lt); }
+.type-card.active-rent { border-color: var(--amber); background: var(--amber-lt); }
+
+/* ══════════════════════════════════════
+   CHARTS SECTION
+══════════════════════════════════════ */
+#chartsRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+}
+.chart-card h3 {
+  font-size: 11px; font-weight: 800;
+  color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: .8px; margin-bottom: 12px;
+  display: flex; align-items: center; gap: 6px;
+}
+.chart-canvas-wrap { position: relative; height: 155px; }
+
+/* ══════════════════════════════════════
+   COMMAND PALETTE
+══════════════════════════════════════ */
+#cmdOverlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(15,14,23,.6);
+  z-index: 500; align-items: flex-start;
+  justify-content: center; padding-top: 10vh;
+  backdrop-filter: blur(8px);
+}
+#cmdOverlay.open { display: flex; animation: fadeIn .12s ease; }
+#cmdBox {
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  width: 100%; max-width: 520px;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+#cmdInput {
+  width: 100%; padding: 16px 20px;
+  font-size: 15px; font-weight: 600;
+  border: none; border-bottom: 1px solid var(--border);
+  background: transparent; color: var(--text);
+  outline: none; font-family: 'Cairo', sans-serif;
+}
+#cmdResults { max-height: 320px; overflow-y: auto; }
+.cmd-item {
+  padding: 12px 20px; cursor: pointer;
+  display: flex; align-items: center; gap: 14px;
+  transition: background var(--tr);
+  border-bottom: 1px solid var(--border-lt);
+}
+.cmd-item:hover, .cmd-item.sel {
+  background: var(--brand-xl);
+}
+[data-theme="dark"] .cmd-item:hover,
+[data-theme="dark"] .cmd-item.sel { background: #0d2d2d; }
+.cmd-item .ci { font-size: 18px; width: 28px; text-align: center; }
+.cmd-item .ct { font-size: 13px; font-weight: 700; color: var(--text); }
+.cmd-item .cs { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+.cmd-hint {
+  padding: 9px 20px; font-size: 11px;
+  color: var(--text-muted); display: flex;
+  gap: 16px; border-top: 1px solid var(--border-lt);
+  background: var(--surface2);
+}
+.cmd-hint kbd {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px; padding: 1px 6px;
+  font-family: monospace; font-size: 10px;
+  box-shadow: 0 1px 0 var(--border);
+}
+
+/* ══════════════════════════════════════
+   DARK MODE EXTRA RULES
+══════════════════════════════════════ */
+[data-theme="dark"] td.sc { background: var(--surface); }
+[data-theme="dark"] tr:hover td.sc { background: #1f1d2e; }
+[data-theme="dark"] th.sc { background: var(--surface2); }
+[data-theme="dark"] .panel { background: var(--surface); border-color: var(--border); }
+[data-theme="dark"] .scard { background: var(--surface); border-color: var(--border); }
+[data-theme="dark"] .topbar { background: var(--surface); border-color: var(--border); }
+[data-theme="dark"] .ph { background: var(--surface); }
+[data-theme="dark"] .sb { background: var(--surface2); }
+[data-theme="dark"] input, [data-theme="dark"] select { background: var(--surface2); color: var(--text); border-color: var(--border); }
+[data-theme="dark"] .mbx { background: var(--surface); }
+[data-theme="dark"] .lcard { background: var(--surface); border-color: var(--border); }
+[data-theme="dark"] .ibanner { background: #1c1408; border-color: #78350f; }
+[data-theme="dark"] .type-card { background: var(--surface); border-color: var(--border); color: var(--text); }
+[data-theme="dark"] .type-card.active-own  { background: #0a2a1e; border-color: var(--green); }
+[data-theme="dark"] .type-card.active-rent { background: #1c1408; border-color: var(--amber); }
+[data-theme="dark"] .mi { background: #0d2d2d; border-color: rgba(45,212,191,.2); }
+[data-theme="dark"] .chart-card { background: var(--surface); border-color: var(--border); }
+[data-theme="dark"] .lrow { background: var(--surface2); border-color: var(--border); }
+
+/* ══════════════════════════════════════
+   ANIMATIONS
+══════════════════════════════════════ */
+@keyframes slideUp { from{transform:translateY(16px);opacity:0} to{transform:translateY(0);opacity:1} }
+@keyframes fadeIn  { from{opacity:0} to{opacity:1} }
+@keyframes pulse   { 0%,100%{opacity:1} 50%{opacity:.5} }
+@keyframes shake   { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
+@keyframes countUp { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+
+.sec.active { animation: fadeIn .22s ease; }
+.mbx { animation: slideUp .22s cubic-bezier(.16,1,.3,1); }
+
+/* ══════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════ */
+@media (max-width: 900px) {
+  :root { --sidebar-w: 56px; }
+  .brand-info, .brand-v, .nav-lbl, .nav button span { display: none; }
+  .brand { justify-content: center; padding: 12px 8px; }
+  .nav button { justify-content: center; padding: 10px; margin: 0 4px; }
+  .nav-ico { font-size: 20px; }
+  .stats { grid-template-columns: repeat(2,1fr); }
+  .pg { grid-template-columns: 1fr; }
+  #chartsRow { grid-template-columns: 1fr !important; }
+  .lgrid { grid-template-columns: repeat(2,1fr); }
+}
+@media (max-width: 600px) {
+  .stats { grid-template-columns: 1fr 1fr; }
+  .eg { grid-template-columns: 1fr; }
+}
+
+
+
+/* Monthly table horizontal scrollbar improvement */
+.tw{
+  scrollbar-width: auto;
+  scrollbar-color: var(--brand) var(--surface2);
+  padding-bottom: 6px;
+}
+.tw::-webkit-scrollbar{
+  height: 18px;
+  width: 14px;
+}
+.tw::-webkit-scrollbar-track{
+  background: var(--surface2);
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.tw::-webkit-scrollbar-thumb{
+  background: linear-gradient(90deg, var(--brand) 0%, var(--brand-lg) 100%);
+  border-radius: 999px;
+  border: 3px solid var(--surface2);
+}
+.tw::-webkit-scrollbar-thumb:hover{
+  background: linear-gradient(90deg, var(--brand-dk) 0%, var(--brand) 100%);
+}
+.tw::-webkit-scrollbar-corner{
+  background: var(--surface2);
+}
+
+/* Make the monthly table easier to drag on touch devices */
+.tw{
+  cursor: grab;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+}
+.tw:active{ cursor: grabbing; }
+
+/* Small helper note area if needed later */
+.scroll-hint{
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+
+
+/* Stronger grab/hand behavior for monthly sheet */
+.tw.drag-scroll-ready,
+.tw.drag-scroll-ready *{
+  user-select: none;
+}
+.tw.drag-scroll-ready{
+  cursor: grab !important;
+}
+.tw.drag-scroll-ready:active,
+.tw.drag-scroll-ready.dragging{
+  cursor: grabbing !important;
+}
+.tw.drag-scroll-ready table,
+.tw.drag-scroll-ready tbody,
+.tw.drag-scroll-ready tr,
+.tw.drag-scroll-ready td,
+.tw.drag-scroll-ready th{
+  cursor: inherit;
+}
+
+/* Distinguish amount/net columns in monthly table */
+#monthWrap td:nth-last-child(2),
+#monthWrap th:nth-last-child(2),
+#monthWrap td:nth-last-child(1),
+#monthWrap th:nth-last-child(1){
+  font-weight: 800;
+}
+#monthWrap td:nth-last-child(2),
+#monthWrap th:nth-last-child(2){
+  background: color-mix(in srgb, var(--blue-lt) 55%, white 45%);
+  color: var(--blue-dk);
+}
+#monthWrap td:nth-last-child(1),
+#monthWrap th:nth-last-child(1){
+  background: color-mix(in srgb, var(--green-lt) 65%, white 35%);
+  color: var(--green-dk);
+}
+[data-theme="dark"] #monthWrap td:nth-last-child(2),
+[data-theme="dark"] #monthWrap th:nth-last-child(2){
+  background: rgba(59,130,246,.16);
+  color: #93c5fd;
+}
+[data-theme="dark"] #monthWrap td:nth-last-child(1),
+[data-theme="dark"] #monthWrap th:nth-last-child(1){
+  background: rgba(16,185,129,.16);
+  color: #86efac;
+}
+
+/* Keep hover nice */
+#monthWrap tr:hover td:nth-last-child(2){
+  background: color-mix(in srgb, var(--blue-lt) 70%, white 30%);
+}
+#monthWrap tr:hover td:nth-last-child(1){
+  background: color-mix(in srgb, var(--green-lt) 75%, white 25%);
+}
+[data-theme="dark"] #monthWrap tr:hover td:nth-last-child(2){
+  background: rgba(59,130,246,.24);
+}
+[data-theme="dark"] #monthWrap tr:hover td:nth-last-child(1){
+  background: rgba(16,185,129,.24);
+}
+
+</style>
+<body>
+
+<div class="app">
+
+<!-- ============================================================
+     SIDEBAR
+     ============================================================ -->
+<aside class="sidebar" role="navigation" aria-label="القائمة الرئيسية">
+  <div class="brand" style="display:flex;align-items:center;gap:10px"><div class="brand-logo">🏗</div><div class="brand-info"><div class="brand-title">كِراء بناء</div><div class="brand-sub">نظام إدارة الآلات</div></div>
+    <div class="brand-title">🏗 كراء الآلات</div>
+    <div class="brand-sub"><span class="brand-dot"></span> v10 — نظام متابعة شهري</div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-lbl">العمليات</div>
+    <div class="nav">
+      <button class="active" onclick="goTo('dashboard',this)" aria-current="page">
+        <span class="nav-ico">📋</span><span>ورقة الشهر</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-lbl">المكتبات</div>
+    <div class="nav">
+      <button onclick="goTo('sitesPage',this)">
+        <span class="nav-ico">📍</span><span>المواقع</span>
+      </button>
+      <button onclick="goTo('managersPage',this)">
+        <span class="nav-ico">👤</span><span>المديرون</span>
+      </button>
+      <button onclick="goTo('machinesLib',this)">
+        <span class="nav-ico">🏗</span><span>الآلات</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-lbl">المتابعة المالية</div>
+    <div class="nav">
+      <button onclick="goTo('paymentsPage',this)">
+        <span class="nav-ico">💳</span><span>المدفوع والمعلّق</span>
+      </button>
+      <button onclick="goTo('overtimePage',this)">
+        <span class="nav-ico">⏱</span><span>الساعات الإضافية</span>
+      </button>
+      <button onclick="goTo('reportsPage',this)">
+        <span class="nav-ico">📊</span><span>التقارير</span>
+      </button>
+      <button id="expBtn" style="display:none" onclick="goTo('expensePage',this)">
+        <span class="nav-ico">💰</span><span>مصاريف الآلة</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="sidebar-footer">كراء الآلات · جميع الحقوق محفوظة</div>
+</aside>
+
+<!-- ============================================================
+     MAIN CONTENT
+     ============================================================ -->
+<main class="content" role="main">
+
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <div>
+      <div class="topbar-title">متابعة كراء الآلات</div>
+      <div class="topbar-sub">مكتبة آلات · مديرون ثابتون · إسناد شهري</div>
+    </div>
+    <div class="topbar-actions btns" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted);background:var(--surface2);padding:4px 10px;border-radius:999px;border:1px solid var(--border)"><span id="saveDot" style="width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block;transition:.15s;flex-shrink:0"></span><span id="saveStatus">محفوظ</span></span>
+      <button class="btn btn-accent" onclick="openM('mAssign')">+ إسناد آلة</button>
+      <button class="btn btn-primary" onclick="openM('mCopy')" title="نسخ كل آلات شهر لشهر آخر">📋 نسخ الشهر</button>
+      <div class="zoom-ctrl">
+        <button class="btn btn-ghost btn-sm" onclick="zoom(-1)" title="تصغير" style="font-size:15px;padding:3px 8px">−</button>
+        <span id="zLbl">100%</span>
+        <button class="btn btn-ghost btn-sm" onclick="zoom(1)" title="تكبير" style="font-size:15px;padding:3px 8px">+</button>
+        <button class="btn btn-ghost btn-sm" onclick="zoom(0)" title="إعادة تعيين" style="font-size:11px;padding:3px 7px">↺</button>
+      </div>
+      <button class="btn btn-light" onclick="window.print()" title="طباعة">🖨</button>
+      <button id="themeToggle" onclick="toggleTheme()" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:10px;padding:6px 12px;cursor:pointer;font-size:15px;transition:var(--tr);color:var(--text)" title="تبديل الوضع الليلي">🌙</button><button class="btn btn-ghost btn-sm" onclick="openCmd()" title="بحث سريع Ctrl+K" style="font-size:13px">🔍 <span style='font-size:10px;opacity:.6'>K</span></button><button class="btn btn-green" onclick="saveData()" title="حفظ البيانات">💾 حفظ</button>
+      <button class="btn btn-light" onclick="loadData()" title="استيراد ملف JSON">📂 فتح</button>
+        <button id="lockIndicator" onclick="toggleLock()" style="display:inline-flex;align-items:center;gap:5px;padding:7px 13px;border-radius:8px;font-family:Cairo,sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;border:1px solid #fca5a5;background:#fee2e2;color:#dc2626;transition:.2s;">🔒 مقفل</button>
+    </div>
+  </header>
+
+  <!-- ============================================================
+       DASHBOARD — ورقة الشهر
+       ============================================================ -->
+  <section id="dashboard" class="sec active">
+    <!-- KPI Stats -->
+    <div class="stats" style="margin-bottom:10px">
+      <div class="scard"><div class="lbl">الآلات</div><div class="val" id="cM">—</div><div class="note" id="cT"></div></div>
+<div id="chartsRow"><div class="chart-card"><h3>📈 المبالغ الشهرية (صافي)</h3><div class="chart-canvas-wrap"><canvas id="monthlyChart"></canvas></div></div><div class="chart-card"><h3>🏗 توزيع الآلات حسب النوع</h3><div class="chart-canvas-wrap"><canvas id="typeChart"></canvas></div></div></div>
+
+      <div class="scard"><div class="lbl">الساعات</div><div class="val" id="cH">—</div></div>
+      <div class="scard"><div class="lbl">المبلغ</div><div class="val" id="cG">—</div></div>
+      <div class="scard"><div class="lbl">الصافي</div><div class="val" id="cN">—</div></div>
+    </div>
+
+    <!-- Two-column grid -->
+    <div class="pg">
+      <!-- Main table panel -->
+      <div class="panel">
+        <div class="ph" style="display:flex;justify-content:space-between;align-items:center;">
+          <h2>الجدول الشهري</h2>
+          <button class="btn btn-light btn-sm" onclick="printMonthlyTable()" style="gap:5px;">🖨️ طباعة الجدول</button>
+        </div>
+        <div class="pb">
+          <!-- Date navigation -->
+          <div class="dnav">
+            <div class="dnav-g">
+              <label>📅 السنة</label>
+              <select id="selY" onchange="render()"></select>
+            </div>
+            <div class="dnav-g">
+              <label>🗓 الشهر</label>
+              <select id="selM" onchange="render()"></select>
+            </div>
+            <div class="dnav-btns">
+              <button class="arr" onclick="shiftM(-1)" title="الشهر السابق" aria-label="الشهر السابق">→</button>
+              <button class="arr" onclick="shiftM(1)" title="الشهر التالي" aria-label="الشهر التالي">←</button>
+              <button class="btn btn-accent btn-sm" onclick="openM('mMonth')">+ شهر</button>
+            </div>
+          </div>
+
+          <!-- Filters -->
+          <div class="frow" role="search">
+            <div class="ctrl">
+              <label>🏗 النوع</label>
+              <select id="fT" onchange="render()"><option value="">الكل</option></select>
+            </div>
+            <div class="ctrl">
+              <label>📍 المنطقة</label>
+              <select id="fR" onchange="render()"><option value="">الكل</option></select>
+            </div>
+            <div class="ctrl">
+              <label>🏭 البلاطفورم</label>
+              <select id="fP" onchange="render()"><option value="">الكل</option></select>
+            </div>
+            <div class="ctrl">
+              <label>👤 المدير</label>
+              <select id="fMg" onchange="render()"><option value="">الكل</option></select>
+            </div>
+            <div class="ctrl">
+              <label>🔍 بحث</label>
+              <input id="fQ" placeholder="اسم آلة أو صاحب..." oninput="render()" aria-label="بحث">
+            </div>
+            <button class="btn btn-ghost btn-sm" style="align-self:flex-end" onclick="resetF()" title="إعادة ضبط الفلاتر">↺</button>
+          </div>
+
+          <!-- Ownership tabs -->
+          <div style="display:flex;gap:5px;margin-bottom:7px;flex-wrap:wrap;align-items:center">
+            <span style="font-size:10px;color:var(--text-muted);font-weight:600">الملكية:</span>
+            <div class="vt active" data-own="all"    onclick="setOwn(this)">🔵 الكل</div>
+            <div class="vt"        data-own="own"    onclick="setOwn(this)">🟢 آلاتي الخاصة</div>
+            <div class="vt"        data-own="rented" onclick="setOwn(this)">🟠 المستأجرة</div>
+          </div>
+
+          <!-- View tabs -->
+          <div class="vtabs">
+            <div class="vt active" data-v="month"    onclick="setV(this)">📅 الشهر</div>
+            <div class="vt"        data-v="type"     onclick="setV(this)">🏗 النوع</div>
+            <div class="vt"        data-v="region"   onclick="setV(this)">📍 المنطقة</div>
+            <div class="vt"        data-v="platform" onclick="setV(this)">🏭 البلاطفورم</div>
+            <div class="vt"        data-v="manager"  onclick="setV(this)">👤 المدير</div>
+          </div>
+
+          <div class="banner" id="banner" role="alert"></div>
+          <div class="tw" role="region" aria-label="جدول الآلات الشهري">
+            <table>
+              <thead id="TH"></thead>
+              <tbody id="TB"></tbody>
+              <tfoot id="TF"></tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary sidebar -->
+      <div>
+        <div class="panel">
+          <div class="ph"><h2>ملخص</h2></div>
+          <div class="pb" style="padding:10px 13px">
+            <div class="sb"><div class="bg">الفترة</div><strong id="sD">—</strong></div>
+            <div class="sb"><div class="bg">المنطقة</div><strong id="sR">—</strong></div>
+            <div class="sb"><div class="bg">البلاطفورم</div><strong id="sP">—</strong></div>
+            <div class="sb"><div class="bg">المدير</div><strong id="sMg">—</strong></div>
+            <div class="sb"><div class="bg">الساعات</div><strong id="sH">—</strong></div>
+            <div class="sb"><div class="bg">المبلغ</div><strong id="sG">—</strong></div>
+            <div class="sb"><div class="bg">المصاريف</div><strong id="sE">—</strong></div>
+            <div class="sb">
+              <div class="bg">📈 مقارنة الأشهر</div>
+              <div id="miniChart" style="display:flex;align-items:flex-end;gap:3px;height:50px;padding:4px 0;border-bottom:1px solid var(--border-lt)"></div>
+            </div>
+            <div class="sb" style="background:#dcfce7;border-color:#86efac">
+              <div class="bg" style="background:#86efac;color:var(--green-dk)">الصافي</div>
+              <strong id="sN" style="color:var(--green-dk)">—</strong>
+            </div>
+            <div class="tl">
+              <button class="btn btn-ghost btn-sm" onclick="resetF()">↺ إعادة ضبط</button>
+              <button class="btn btn-primary btn-sm" onclick="window.print()">🖨 طباعة</button>
+            </div>
+          </div>
+        </div>
+        <div class="scroll-hint">↔ يمكنك سحب الشريط السفلي بسهولة أكبر للتنقل أفقياً داخل الجدول.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       SITES PAGE — المواقع
+       ============================================================ -->
+  <section id="sitesPage" class="sec">
+    <div class="panel">
+      <div class="ph">
+        <div>
+          <h2>📍 المواقع</h2>
+          <div class="sub">منطقة + بلاطفورم + مدير ثابت</div>
+        </div>
+        <button class="btn btn-primary" onclick="openM('mSite')">+ إضافة موقع</button>
+      </div>
+      <div class="pb">
+        <div class="lgrid" id="sitesGrid"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       MANAGERS PAGE — المديرون
+       ============================================================ -->
+  <section id="managersPage" class="sec">
+    <div class="panel">
+      <div class="ph">
+        <div>
+          <h2>👤 المديرون</h2>
+          <div class="sub">ثابتون — يُختارون عند إضافة موقع</div>
+        </div>
+        <button class="btn btn-primary" onclick="openM('mManager')">+ إضافة مدير</button>
+      </div>
+      <div class="pb" id="mgrList"></div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       MACHINES LIBRARY — مكتبة الآلات
+       ============================================================ -->
+  <section id="machinesLib" class="sec">
+    <div class="panel">
+      <div class="ph">
+        <div>
+          <h2>🏗 مكتبة الآلات</h2>
+          <div class="sub">اسم + نوع — الصاحب يُحدد في كل إسناد</div>
+        </div>
+        <button class="btn btn-primary" onclick="openM('mMachine')">+ إضافة آلة</button>
+      </div>
+      <div class="pb" id="machList"></div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       REPORTS PAGE — التقارير
+       ============================================================ -->
+  <section id="reportsPage" class="sec">
+    <div class="panel">
+      <div class="ph"><h2>📊 تقرير مفصّل</h2></div>
+      <div class="pb">
+        <div class="tw">
+          <table>
+            <thead><tr>
+              <th style="text-align:right">المنطقة</th>
+              <th style="text-align:right">البلاطفورم</th>
+              <th style="text-align:right">المدير</th>
+              <th>الشهر</th>
+              <th>الآلات</th><th>الساعات</th><th>الأيام</th>
+              <th>المبلغ</th><th>المصاريف</th><th>الصافي</th>
+            </tr></thead>
+            <tbody id="repBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:10px">
+      <div class="ph"><h2>📈 مقارنة الأشهر</h2></div>
+      <div class="pb">
+        <div class="tw">
+          <table>
+            <thead><tr>
+              <th style="text-align:right">الشهر</th>
+              <th>الآلات</th><th>الساعات</th>
+              <th>المبلغ</th><th>المصاريف</th><th>الصافي</th>
+            </tr></thead>
+            <tbody id="cmpBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       EXPENSES PAGE — مصاريف الآلة
+       ============================================================ -->
+  <section id="expensePage" class="sec">
+    <div class="panel">
+      <div class="ph">
+        <div>
+          <h2 id="expT">مصاريف الآلة</h2>
+          <div class="sub" id="expS"></div>
+        </div>
+        <button class="btn btn-light btn-sm" onclick="goTo('dashboard',document.querySelector('.nav button'))">⬅ عودة</button>
+      </div>
+      <div class="pb eg">
+        <div>
+          <div class="tw" style="max-height:none">
+            <table>
+              <thead><tr>
+                <th style="text-align:right">البيان</th>
+                <th>النوع</th><th>المبلغ</th><th>ملاحظة</th><th></th>
+              </tr></thead>
+              <tbody id="expRows"></tbody>
+            </table>
+          </div>
+          <div class="tl" style="margin-top:10px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="addExpRow()">+ بند جديد</button>
+            <button class="btn btn-light btn-sm" onclick="addP('وقود')">⛽ وقود</button>
+            <button class="btn btn-light btn-sm" onclick="addP('صيانة')">🔧 صيانة</button>
+            <button class="btn btn-light btn-sm" onclick="addP('راتب السائق')">👷 راتب</button>
+            <button class="btn btn-light btn-sm" onclick="addP('نقل')">🚛 نقل</button>
+            <button class="btn btn-light btn-sm" onclick="addP('زيت')">🛢 زيت</button>
+          </div>
+        </div>
+        <div>
+          <div class="sb"><div class="bg">الآلة / الصاحب</div><strong id="eMach">—</strong></div>
+          <div class="sb"><div class="bg">المنطقة</div><strong id="eReg">—</strong></div>
+          <div class="sb"><div class="bg">البلاطفورم</div><strong id="ePlat">—</strong></div>
+          <div class="sb"><div class="bg">المدير</div><strong id="eMgr">—</strong></div>
+          <div class="sb" style="background:var(--red-lt);border-color:#fca5a5">
+            <div class="bg" style="background:#fca5a5;color:var(--red-dk)">إجمالي المصاريف</div>
+            <strong id="eTotal" style="color:var(--red);font-size:18px">0 دج</strong>
+          </div>
+          <div class="mi"><strong>💡 حساب تلقائي</strong>يُحدَّث فوراً في جدول الشهر.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       PAYMENTS PAGE — المدفوع والمعلّق
+       ============================================================ -->
+  <section id="paymentsPage" class="sec">
+    <!-- KPI Cards -->
+    <div class="stats" style="grid-template-columns:repeat(4,1fr);margin-bottom:10px">
+      <div class="scard" style="--accent-c:var(--green)">
+        <div class="lbl">✅ المدفوع</div>
+        <div class="val" id="pKpiPaid">—</div>
+        <div class="note" id="pKpiPaidCnt"></div>
+      </div>
+      <div class="scard" style="border-right-color:var(--amber)!important">
+        <div class="lbl">⏳ المعلّق</div>
+        <div class="val" id="pKpiPend">—</div>
+        <div class="note" id="pKpiPendCnt"></div>
+      </div>
+      <div class="scard" style="border-right-color:var(--red)!important">
+        <div class="lbl">نسبة التحصيل</div>
+        <div class="val" id="pKpiRate">—</div>
+        <div class="note">من إجمالي الفواتير</div>
+      </div>
+      <div class="scard">
+        <div class="lbl">إجمالي الفواتير</div>
+        <div class="val" id="pKpiTotal">—</div>
+        <div class="note" id="pKpiTotalCnt"></div>
+      </div>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="panel" style="margin-bottom:10px">
+      <div class="pb" style="padding:12px 16px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+          <span style="color:var(--green);font-weight:700">✅ المدفوع</span>
+          <span id="pBarLbl" style="color:var(--text-muted)"></span>
+          <span style="color:var(--amber);font-weight:700">⏳ المعلّق</span>
+        </div>
+        <div style="background:var(--red-lt);border-radius:999px;height:16px;overflow:hidden">
+          <div id="pBar" style="height:100%;background:linear-gradient(90deg,var(--green-dk),var(--green));border-radius:999px;transition:.5s;width:0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:11px">
+      <!-- Paid -->
+      <div class="panel">
+        <div class="ph" style="background:#f0fdf4;border-bottom:2px solid #86efac">
+          <div>
+            <h2 style="color:var(--green-dk)">✅ المدفوع</h2>
+            <div class="sub" id="paidSub"></div>
+          </div>
+          <button class="btn btn-sm" style="background:var(--green-lt);color:var(--green-dk);border:1px solid #86efac" onclick="markAllPaid(true)">تحديد الكل مدفوع</button>
+        </div>
+        <div class="pb">
+          <div class="frow" style="margin-bottom:8px">
+            <div class="ctrl"><label>الشهر</label><select id="pfMonth1" onchange="renderPayments()"><option value="">كل الأشهر</option></select></div>
+            <div class="ctrl"><label>الموقع</label><select id="pfSite1" onchange="renderPayments()"><option value="">الكل</option></select></div>
+          </div>
+          <div class="tw" style="max-height:50vh">
+            <table>
+              <thead><tr>
+                <th style="text-align:right">الآلة / الصاحب</th>
+                <th style="text-align:right">الموقع</th>
+                <th>الشهر</th><th>الصافي</th><th></th>
+              </tr></thead>
+              <tbody id="paidBody"></tbody>
+              <tfoot><tr><th colspan="3" style="text-align:right">المجموع</th><th id="paidTotal" style="color:var(--green)"></th><th></th></tr></tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pending -->
+      <div class="panel">
+        <div class="ph" style="background:#fffbeb;border-bottom:2px solid #fde68a">
+          <div>
+            <h2 style="color:var(--amber-dk)">⏳ المعلّق</h2>
+            <div class="sub" id="pendSub"></div>
+          </div>
+          <button class="btn btn-sm" style="background:var(--amber-lt);color:var(--amber-dk);border:1px solid #fde68a" onclick="markAllPaid(false)">تحديد الكل معلّق</button>
+        </div>
+        <div class="pb">
+          <div class="frow" style="margin-bottom:8px">
+            <div class="ctrl"><label>الشهر</label><select id="pfMonth2" onchange="renderPayments()"><option value="">كل الأشهر</option></select></div>
+            <div class="ctrl"><label>الموقع</label><select id="pfSite2" onchange="renderPayments()"><option value="">الكل</option></select></div>
+          </div>
+          <div class="tw" style="max-height:50vh">
+            <table>
+              <thead><tr>
+                <th style="text-align:right">الآلة / الصاحب</th>
+                <th style="text-align:right">الموقع</th>
+                <th>الشهر</th><th>الصافي</th><th></th>
+              </tr></thead>
+              <tbody id="pendBody"></tbody>
+              <tfoot><tr><th colspan="3" style="text-align:right">المجموع</th><th id="pendTotal" style="color:var(--amber)"></th><th></th></tr></tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Site summary -->
+    <div class="panel">
+      <div class="ph"><h2>📍 ملخص حسب الموقع والشهر</h2></div>
+      <div class="pb">
+        <div class="tw">
+          <table>
+            <thead><tr>
+              <th style="text-align:right">الموقع / البلاطفورم</th>
+              <th style="text-align:right">المنطقة</th>
+              <th>الشهر</th><th>الآلات</th>
+              <th style="color:var(--green)">مدفوع</th>
+              <th style="color:var(--amber)">معلّق</th>
+              <th>المجموع</th><th></th>
+            </tr></thead>
+            <tbody id="pSiteBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       OVERTIME PAGE — الساعات الإضافية
+       ============================================================ -->
+  <section id="overtimePage" class="sec">
+    <div class="stats" style="grid-template-columns:repeat(4,1fr);margin-bottom:10px">
+      <div class="scard"><div class="lbl">👷 السائقون</div><div class="val" id="otDrv">—</div></div>
+      <div class="scard"><div class="lbl">ساعات عادية</div><div class="val" id="otNorm">—</div></div>
+      <div class="scard" style="border-right-color:var(--amber)!important">
+        <div class="lbl">⏱ ساعات إضافية</div>
+        <div class="val" id="otExtra" style="color:var(--amber)">—</div>
+      </div>
+      <div class="scard"><div class="lbl">نسبة الإضافي</div><div class="val" id="otRate">—</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="ph">
+        <div>
+          <h2>⏱ الساعات الإضافية للسائقين</h2>
+          <div class="sub">الجمعة = 4 ساعات عادية | باقي الأيام = 8 ساعات عادية</div>
+        </div>
+      </div>
+      <div class="pb">
+        <div class="frow" style="margin-bottom:10px">
+          <div class="ctrl"><label>السنة</label><select id="otY" onchange="renderOvertime()"><option value="">كل السنوات</option></select></div>
+          <div class="ctrl"><label>الشهر</label><select id="otM" onchange="renderOvertime()"><option value="">كل الأشهر</option></select></div>
+          <div class="ctrl"><label>السائق</label><select id="otD" onchange="renderOvertime()"><option value="">كل السائقين</option></select></div>
+        </div>
+        <div id="otDriverCards"></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+</div>
+
+<!-- ============================================================
+     MODALS
+     ============================================================ -->
+
+<!-- إسناد آلة -->
+<div class="ov" id="mAssign" role="dialog" aria-modal="true" aria-labelledby="mAssignTitle">
+  <div class="mbx">
+    <h3 id="mAssignTitle">📋 إسناد آلة لشهر وموقع</h3>
+    <div class="ibanner">💡 صاحب الآلة يمكن أن يتغير من شهر لآخر — الآلة ثابتة في المكتبة</div>
+    <div class="mg">
+      <div class="ctrl">
+        <label>1. الآلة من المكتبة</label>
+        <select id="aaMach"><option value="">— اختر الآلة —</option></select>
+        <div id="aaMachBadge" style="display:none;margin-top:6px;padding:8px 12px;border-radius:9px;font-size:12px;font-weight:700"></div>
+      </div>
+      <div class="ctrl"><label>2. صاحب الآلة (هذا الشهر)</label><input id="aaOwn" placeholder="اسم صاحب الآلة لهذا الشهر فقط"></div>
+      <div class="ctrl" id="aaDriverBox">
+        <label>اسم السائق</label>
+        <input id="aaDriver" placeholder="اسم السائق (اختياري)">
+      </div>
+      <div class="ctrl">
+        <label>3. السنة</label>
+        <select id="aaYear" onchange="syncAssignMonth()">
+          <option value="2020">2020</option>
+          <option value="2021">2021</option>
+          <option value="2022">2022</option>
+          <option value="2023">2023</option>
+          <option value="2024">2024</option>
+          <option value="2025">2025</option>
+          <option value="2026" selected>2026</option>
+          <option value="2027">2027</option>
+          <option value="2028">2028</option>
+          <option value="2029">2029</option>
+          <option value="2030">2030</option>
+        </select>
+      </div>
+      <div class="ctrl">
+        <label>الشهر</label>
+        <select id="aaMonthNum" onchange="syncAssignMonth()">
+          <option value="1">جانفي</option><option value="2">فيفري</option><option value="3">مارس</option>
+          <option value="4">أفريل</option><option value="5">ماي</option><option value="6">جوان</option>
+          <option value="7">جويلية</option><option value="8">أوت</option><option value="9">سبتمبر</option>
+          <option value="10">أكتوبر</option><option value="11">نوفمبر</option><option value="12">ديسمبر</option>
+        </select>
+      </div>
+      <div id="aaMonthPreview" style="background:var(--brand-xl);color:var(--brand);border-radius:8px;padding:7px 12px;font-weight:700;font-size:13px;text-align:center"></div>
+      <div class="ctrl"><label>4. الموقع / البلاطفورم</label><select id="aaSite"><option value="">— اختر الموقع —</option></select></div>
+      <div class="ctrl"><label>5. سعر اليوم (دج)</label><input type="number" id="aaPrice" placeholder="مثال: 30000"></div>
+    </div>
+    <div class="ma">
+      <button class="btn btn-light" onclick="closeM('mAssign')">إلغاء</button>
+      <button class="btn btn-accent" onclick="saveAssign()">✓ إضافة الآلة للشهر</button>
+    </div>
+  </div>
+</div>
+
+<!-- إضافة شهر -->
+<div class="ov" id="mMonth" role="dialog" aria-modal="true">
+  <div class="mbx">
+    <h3>📅 إضافة شهر جديد</h3>
+    <div class="mg">
+      <div class="ctrl">
+        <label>الشهر</label>
+        <select id="nmM" onchange="updateMonthPreview()">
+          <option value="1">جانفي</option><option value="2">فيفري</option><option value="3">مارس</option>
+          <option value="4">أفريل</option><option value="5">ماي</option><option value="6">جوان</option>
+          <option value="7">جويلية</option><option value="8" selected>أوت</option><option value="9">سبتمبر</option>
+          <option value="10">أكتوبر</option><option value="11">نوفمبر</option><option value="12">ديسمبر</option>
+        </select>
+      </div>
+      <div class="ctrl">
+        <label>السنة</label>
+        <input id="nmY" type="number" value="2026" min="2020" max="2030" placeholder="مثال: 2027" oninput="updateMonthPreview()">
+      </div>
+      <div id="nmPreview" style="background:var(--brand-xl);color:var(--brand);border-radius:8px;padding:8px 12px;font-weight:700;font-size:14px;text-align:center"></div>
+    </div>
+    <div class="ma">
+      <button class="btn btn-light" onclick="closeM('mMonth')">إلغاء</button>
+      <button class="btn btn-accent" onclick="saveMonth()">✓ إضافة</button>
+    </div>
+  </div>
+</div>
+
+<!-- إضافة موقع -->
+<div class="ov" id="mSite" role="dialog" aria-modal="true">
+  <div class="mbx">
+    <h3>📍 إضافة موقع جديد</h3>
+    <div class="mg">
+      <div class="ctrl"><label>المنطقة / الولاية</label><input id="nsReg" placeholder="مثال: حاسي مسعود، الوادي..."></div>
+      <div class="ctrl"><label>اسم البلاطفورم</label><input id="nsPlt" placeholder="مثال: TOAP 17، Nid Massoud..."></div>
+      <div class="ctrl">
+        <label>مدير الموقع</label>
+        <select id="nsMgr"><option value="">— اختر المدير —</option></select>
+        <div class="hint">إذا لم يكن موجوداً → أضفه أولاً من صفحة المديرين</div>
+      </div>
+    </div>
+    <div class="ma">
+      <button class="btn btn-light" onclick="closeM('mSite')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveSite()">✓ حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- إضافة مدير -->
+<div class="ov" id="mManager" role="dialog" aria-modal="true">
+  <div class="mbx">
+    <h3>👤 إضافة مدير</h3>
+    <div class="mg">
+      <div class="ctrl"><label>الاسم الكامل</label><input id="mgN" placeholder="مثال: Hamza Ghamri"></div>
+    </div>
+    <div class="ma">
+      <button class="btn btn-light" onclick="closeM('mManager')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveMgr()">✓ إضافة</button>
+    </div>
+  </div>
+</div>
+
+<!-- إضافة آلة -->
+<div class="ov" id="mMachine" role="dialog" aria-modal="true">
+  <div class="mbx">
+    <h3>🏗 إضافة آلة للمكتبة</h3>
+    <div class="mg">
+      <div class="ctrl"><label>اسم الآلة</label><input id="mcN" placeholder="مثال: Poclain Volvo EC240"></div>
+      <div class="ctrl">
+        <label>النوع</label>
+        <input id="mcT" list="typesDL" placeholder="Poclain، Bull، Camion...">
+        <datalist id="typesDL"></datalist>
+      </div>
+      <div class="ctrl">
+        <label>ملكية الآلة</label>
+        <select id="mcOwn" onchange="document.getElementById('mcRateBox').style.display=this.value==='rented'?'block':'none'">
+          <option value="own">🟢 آلتي الخاصة</option>
+          <option value="rented">🟠 مستأجرة</option>
+        </select>
+      </div>
+      <div class="ctrl" id="mcRateBox" style="display:none">
+        <label>سعر كراءها اليومي الذي أدفعه (دج)</label>
+        <input type="number" id="mcRate" placeholder="مثال: 20000">
+        <div class="hint">يُخصم تلقائياً من ربحك في كل حساب</div>
+      </div>
+    </div>
+    <div class="ma">
+      <button class="btn btn-light" onclick="closeM('mMachine')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveMach()">✓ إضافة للمكتبة</button>
+    </div>
+  </div>
+</div>
+
+<!-- نسخ الشهر -->
+<div class="ov" id="mCopy" role="dialog" aria-modal="true">
+  <div class="mbx">
+    <h3>📋 نسخ آلات شهر كامل</h3>
+    <div class="ibanner">💡 تُنسخ كل الآلات والأسعار مع تصفير الساعات — يوفّر وقت الإدخال اليدوي</div>
+    <div class="mg">
+      <div class="ctrl"><label>من الشهر (المصدر)</label><select id="cpFrom"></select></div>
+      <div class="ctrl"><label>إلى الشهر (الهدف)</label><select id="cpTo"></select></div>
+      <div style="background:#f0f9f0;border:1px solid #86efac;border-radius:9px;padding:9px;font-size:12px" id="cpPreview">اختر الشهرين لرؤية الملخص</div>
+    </div>
+    <div class="ma">
+      <button class="btn btn-light" onclick="closeM('mCopy')">إلغاء</button>
+      <button class="btn btn-green" onclick="doCopy()">✓ نسخ الآلات</button>
+    </div>
+  </div>
+</div>
+
+<!-- تعديل آلة -->
+<div class="ov" id="mEditMach" role="dialog" aria-modal="true">
+  <div class="mbx">
+    <h3>✏️ تعديل بيانات الآلة</h3>
+    <input type="hidden" id="emId">
+    <div class="mg">
+      <div class="ctrl"><label>اسم الآلة</label><input id="emN"></div>
+      <div class="ctrl"><label>النوع</label><input id="emT" list="typesDL"></div>
+      <div class="ctrl">
+        <label>ملكية الآلة</label>
+        <select id="emOwn" onchange="document.getElementById('emRateBox').style.display=this.value==='rented'?'block':'none'">
+          <option value="own">🟢 آلتي الخاصة</option>
+          <option value="rented">🟠 مستأجرة</option>
+        </select>
+      </div>
+      <div class="ctrl" id="emRateBox" style="display:none">
+        <label>سعر كراءها اليومي الذي أدفعه (دج)</label>
+        <input type="number" id="emRate" placeholder="مثال: 22000">
+        <div class="hint">يُخصم تلقائياً من ربحك حسب أيام العمل</div>
+      </div>
+      <div class="ctrl" id="emDriverBox">
+        <label>👷 السائق الافتراضي</label>
+        <input id="emDriver" placeholder="اسم السائق المعتاد لهذه الآلة (اختياري)">
+        <div class="hint">يُملأ تلقائياً عند إسناد هذه الآلة</div>
+      </div>
+    </div>
+    <div class="ma">
+      <button class="btn btn-light" onclick="closeM('mEditMach')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveEditMach()">✓ حفظ التعديل</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast notification -->
+<div id="toast" role="status" aria-live="polite"></div>
+
+<!-- ============================================================
+     ALL JAVASCRIPT — fully preserved from original, 0 changes
+     ============================================================ -->
+
+<!-- CMD PALETTE -->
+<div id="cmdOverlay" onclick="if(event.target===this)closeCmd()"><div id="cmdBox"><input id="cmdInput" type="text" placeholder="🔍 ابحث عن صفحة أو إجراء..." oninput="renderCmd(this.value)"><div id="cmdResults"></div><div class="cmd-hint"><span><kbd>↑↓</kbd> تنقل</span><span><kbd>Enter</kbd> تنفيذ</span><span><kbd>Esc</kbd> إغلاق</span><span><kbd>Ctrl+K</kbd> فتح</span></div></div></div>
+<!-- LOCK OVERLAY -->
+<div id="lockOverlay">
+  <div id="lockBox">
+    <div class="lk-ico">🔒</div>
+    <h3>البرنامج مقفل</h3>
+    <p>أدخل كلمة المرور لفتح التعديلات</p>
+    <input type="password" id="lockPwInput" placeholder="••••••••" maxlength="20"
+      onkeydown="if(event.key==='Enter')submitLock()">
+    <button id="lockSubmitBtn" onclick="submitLock()">✓ فتح القفل</button>
+    <div id="lockErrMsg"></div>
+  </div>
+</div>
+
+<script>
+
+// ============================================================
+// DATA
+// ============================================================
+const managers=[
+  {id:'mg1',name:'Hamza Ghamri'},
+  {id:'mg2',name:'Soufiane Mim'},
+  {id:'mg3',name:'Karim Bouzid'},
+  {id:'mg4',name:'Djamel Khelif'},
+  {id:'mg5',name:'Youcef Amara'}
+];
+const sites=[
+  {id:'s1',region:'حاسي مسعود',platform:'Hassi Rmel',managerId:'mg1'},
+  {id:'s2',region:'الوادي',platform:'Nid Massoud',managerId:'mg2'},
+  {id:'s3',region:'ورقلة',platform:'TOAP 17',managerId:'mg2'},
+  {id:'s4',region:'بسكرة',platform:'RDC 32',managerId:'mg3'}
+];
+const machLib=[
+  {id:'ml1',name:'Poclain Volvo EC240',type:'Poclain',ownership:'own',myRentalCost:0},
+  {id:'ml2',name:'Poclain CAT 320',type:'Poclain',ownership:'own',myRentalCost:0},
+  {id:'ml3',name:'Poclain Liebherr',type:'Poclain',ownership:'rented',myRentalCost:22000},
+  {id:'ml4',name:'Bull CAT D8',type:'Bull',ownership:'rented',myRentalCost:38000},
+  {id:'ml5',name:'Bull CAT D6',type:'Bull',ownership:'own',myRentalCost:0},
+  {id:'ml6',name:'Camion citerne',type:'Camion',ownership:'rented',myRentalCost:16000},
+  {id:'ml7',name:'Camion Benne',type:'Camion',ownership:'own',myRentalCost:0},
+  {id:'ml8',name:'Chargeur 966H',type:'Chargeur',ownership:'own',myRentalCost:0}
+];
+const monthList=[
+  {k:'12-2025',l:'ديسمبر 2025'},
+  {k:'1-2026',l:'جانفي 2026'},
+  {k:'2-2026',l:'فيفري 2026'},
+  {k:'3-2026',l:'مارس 2026'},
+  {k:'4-2026',l:'أفريل 2026'}
+];
+function mH(p){return Array.from({length:31},(_,i)=>p[i%p.length])}
+const assignments=[
+  {id:1,machineId:'ml1',owner:'Ahmed K.',driver:'Karim D.',siteId:'s1',month:'12-2025',monthLabel:'ديسمبر 2025',dayPrice:30000,hours:mH([8,8,0,8,8,4,8,8,0,8,8,8,4,8,0,8,8,8,8,0,4,8,8,8,0,8,8,10,8,8,0]),paid:true,expenses:[{label:'وقود',cat:'وقود',amount:22000,note:''},{label:'صيانة',cat:'صيانة',amount:18000,note:''},{label:'زيت',cat:'زيت',amount:9000,note:''}]},
+  {id:2,machineId:'ml4',owner:'Mourad B.',driver:'Ali M.',siteId:'s2',month:'12-2025',monthLabel:'ديسمبر 2025',dayPrice:50000,hours:mH([8,8,8,8,10,8,8,0,8,8,8,8,8,4,8,8,10,8,0,8,8,8,8,8,8,0,8,8,8,4,8]),expenses:[{label:'وقود',cat:'وقود',amount:45000,note:''},{label:'راتب',cat:'راتب السائق',amount:70000,note:''},{label:'نقل',cat:'نقل',amount:45000,note:''}]},
+  {id:3,machineId:'ml6',owner:'Samir H.',driver:'Samir H.',siteId:'s3',month:'12-2025',monthLabel:'ديسمبر 2025',dayPrice:24000,hours:mH([0,8,8,4,8,8,0,8,8,8,0,4,8,8,8,0,8,8,8,4,0,8,8,8,8,0,4,8,8,8,0]),expenses:[{label:'وقود',cat:'وقود',amount:18000,note:''},{label:'صيانة',cat:'صيانة',amount:12000,note:''}]},
+  {id:4,machineId:'ml8',owner:'Lotfi G.',driver:'Yacine B.',siteId:'s1',month:'12-2025',monthLabel:'ديسمبر 2025',dayPrice:28000,hours:mH([8,4,8,8,0,8,8,8,10,8,4,8,8,0,8,8,8,8,4,0,8,8,8,8,8,0,8,8,8,4,8]),expenses:[{label:'وقود',cat:'وقود',amount:25000,note:''},{label:'نقل',cat:'نقل',amount:15000,note:''}]},
+  {id:5,machineId:'ml7',owner:'Karim D.',driver:'Nabil K.',siteId:'s4',month:'1-2026',monthLabel:'جانفي 2026',dayPrice:22000,hours:mH([8,8,8,0,8,8,4,8,8,0,8,8,8,8,0,4,8,8,8,8,0,8,8,8,4,8,8,0,8,8,8]),expenses:[{label:'وقود',cat:'وقود',amount:20000,note:''},{label:'راتب',cat:'راتب السائق',amount:55000,note:''}]},
+  {id:6,machineId:'ml5',owner:'Hadi M.',driver:'Hadi M.',siteId:'s3',month:'1-2026',monthLabel:'جانفي 2026',dayPrice:45000,hours:mH([8,8,8,10,8,0,8,8,8,8,4,8,8,10,8,0,8,8,8,8,8,4,0,8,8,8,8,8,0,8,8]),expenses:[{label:'وقود',cat:'وقود',amount:40000,note:''},{label:'زيت',cat:'زيت',amount:12000,note:''}]}
+];
+
+// ============================================================
+// HELPERS
+// ============================================================
+const MN=['جانفي','فيفري','مارس','أفريل','ماي','جوان','جويلية','أوت','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+const VM={month:{l:'الشهر',tc:'tag-o'},type:{l:'النوع',tc:'tag-p'},region:{l:'المنطقة',tc:'tag'},platform:{l:'البلاطفورم',tc:'tag-g'},manager:{l:'المدير',tc:'tag-p'}};
+let curView='month', expIdx=0;
+
+function gML(id){return machLib.find(m=>m.id===id)||{name:'—',type:'—'}}
+function gS(id){return sites.find(s=>s.id===id)||{region:'—',platform:'—',managerId:''}}
+function gMg(id){return managers.find(m=>m.id===id)||{name:'—'}}
+function gSMg(sid){return gMg(gS(sid).managerId).name}
+function tE(r){return r.expenses.reduce((a,x)=>a+Number(x.amount||0),0)}
+function tT(r){
+  const h=r.hours.reduce((a,b)=>a+Number(b||0),0);
+  const e=tE(r); const d=h/8; const g=d*r.dayPrice;
+  const ml=gML(r.machineId);
+  const rc=(ml.ownership==='rented')?d*(ml.myRentalCost||0):0;
+  return{h,d,e,g,rc,n:g-e};
+}
+function fmt(n){return Number(n||0).toLocaleString('fr-FR')+' دج'}
+function dc(h){h=Number(h||0);return h===0?'c0':h<8?'cp':h===8?'cf':'cx'}
+function hSum(hs){
+  const h0=hs.filter(h=>h==0).length,hp=hs.filter(h=>h>0&&h<8).length,hf=hs.filter(h=>h==8).length,hx=hs.filter(h=>h>8).length;
+  return `<div class="hbar"><span class="hb0">${h0}✗</span><span class="hbp">${hp}½</span><span class="hbf">${hf}✓</span><span class="hbx">${hx}+</span></div>`;
+}
+function rKey(r){const ml=gML(r.machineId),s=gS(r.siteId);return {month:r.monthLabel,type:ml.type,region:s.region,platform:s.platform,manager:gSMg(r.siteId)}[curView]}
+function g$(id){return document.getElementById(id)}
+function set$(id,v){const el=g$(id);if(el)el.textContent=v}
+
+// ============================================================
+// INIT SELECTORS
+// ============================================================
+function buildSelectors(){
+  const years=[...new Set(monthList.map(m=>m.k.split('-')[1]))].sort();
+  const sy=g$('selY'), sm=g$('selM');
+  const vy=sy.value, vm2=sm.value;
+  sy.innerHTML='<option value="">كل السنوات</option>'+years.map(y=>`<option value="${y}">${y}</option>`).join('');
+  sm.innerHTML='<option value="">كل الأشهر</option>'+MN.map((l,i)=>`<option value="${i+1}">${l}</option>`).join('');
+  if(vy&&[...sy.options].some(o=>o.value===vy))sy.value=vy;
+  if(vm2&&[...sm.options].some(o=>o.value===vm2))sm.value=vm2;
+  const types=[...new Set(assignments.map(a=>gML(a.machineId).type))].sort();
+  const regions=[...new Set(assignments.map(a=>gS(a.siteId).region))].sort();
+  const platforms=[...new Set(assignments.map(a=>gS(a.siteId).platform))].sort();
+  const mgrNames=[...new Set(assignments.map(a=>gSMg(a.siteId)))].sort();
+  const upd=(id,vals)=>{const el=g$(id);if(!el)return;const cv=el.value;el.innerHTML='<option value="">الكل</option>'+vals.map(v=>`<option value="${v}">${v}</option>`).join('');if(cv&&[...el.options].some(o=>o.value===cv))el.value=cv;};
+  upd('fT',types);upd('fR',regions);upd('fP',platforms);upd('fMg',mgrNames);
+}
+
+// ============================================================
+// SHIFT MONTH
+// ============================================================
+function shiftM(d){
+  const sy=g$('selY'), sm=g$('selM');
+  let y=parseInt(sy.value||2026), m=parseInt(sm.value||1);
+  m+=d; if(m<1){m=12;y--;}if(m>12){m=1;y++;}
+  sy.value=y; sm.value=m; render();
+}
+
+// ============================================================
+// MAIN RENDER
+// ============================================================
+function render(){
+  const yr=g$('selY').value, mo=g$('selM').value;
+  const fT=g$('fT').value, fR=g$('fR').value, fP=g$('fP').value, fMg=g$('fMg').value, fQ=g$('fQ').value.trim().toLowerCase();
+  let filtered=assignments.filter(a=>{
+    if(yr&&mo&&a.month!==mo+'-'+yr)return false;
+    if(yr&&!mo&&a.month.split('-')[1]!==yr)return false;
+    if(!yr&&mo&&a.month.split('-')[0]!==mo)return false;
+    const ml=gML(a.machineId), s=gS(a.siteId);
+    if(fT&&ml.type!==fT)return false;
+    if(fR&&s.region!==fR)return false;
+    if(fP&&s.platform!==fP)return false;
+    if(fMg&&gSMg(a.siteId)!==fMg)return false;
+    if(fQ&&!ml.name.toLowerCase().includes(fQ)&&!a.owner.toLowerCase().includes(fQ))return false;
+    return true;
+  });
+
+  // Update sidebar summary
+  const fY=yr||'كل السنوات', fM=mo?MN[parseInt(mo)-1]:'كل الأشهر';
+  set$('sD',fM+' '+fY);
+  set$('sR',fR||'الكل'); set$('sP',fP||'الكل'); set$('sMg',fMg||'الكل');
+
+  if(!filtered.length){
+    g$('TB').innerHTML=`<tr><td colspan="40">
+      <div class="empty">
+        <div class="ico">📋</div>
+        <h3>لا توجد آلات</h3>
+        <p>أضف إسناداً أو غيّر الفلتر</p>
+        <button class="btn btn-accent" onclick="openM('mAssign')">+ إسناد آلة</button>
+        <button class="btn btn-primary" onclick="openM('mCopy')" title="نسخ كل آلات شهر لشهر آخر">📋 نسخ الشهر</button>
+      </div></td></tr>`;
+    ['cM','cH'].forEach(id=>set$(id,'0'));['cG','cN','sH','sG','sE','sN'].forEach(id=>set$(id,'0 دج'));
+    g$('cT').textContent=''; renderReports(); return;
+  }
+
+  const showX=curView!=='month', vm=VM[curView];
+  const _thYr=parseInt(yr||2026), _thMo=parseInt(mo||1);
+  const _fridays=new Set();
+  for(let d=1;d<=31;d++){
+    const _dt=new Date(_thYr,_thMo-1,d);
+    if(_dt.getMonth()===(_thMo-1) && _dt.getDay()===5) _fridays.add(d);
+  }
+  g$('TH').innerHTML=`<tr>
+    <th class="sc" style="right:0;background:var(--surface2)">الآلة</th>
+    <th class="sc" style="right:148px;background:var(--surface2)">الموقع</th>
+    ${showX?`<th>${vm.l}</th>`:''}
+    ${Array.from({length:31},(_,i)=>{
+      const day=i+1;
+      const isFri=_fridays.has(day);
+      const isValid=yr&&mo?new Date(_thYr,_thMo-1,day).getMonth()===(_thMo-1):true;
+      const style=isFri?'background:#fef3c7;color:var(--amber-dk);font-weight:800;border-bottom:2px solid var(--amber)':(!isValid?'opacity:.3':'');
+      return `<th style="${style}">${day}${isFri?'<div style="font-size:8px;color:var(--amber)">ج</div>':''}`;
+    }).join('')}
+    <th>الساعات</th><th>الأيام</th><th>سعر اليوم</th><th>المبلغ</th><th>المصاريف</th><th>الصافي</th><th></th>
+  </tr>`;
+
+  const sorted=[...filtered].sort((a,b)=>rKey(a).localeCompare(rKey(b),'ar'));
+  const dayT=Array(31).fill(0);
+  sorted.forEach(r=>r.hours.forEach((h,i)=>dayT[i]+=Number(h||0)));
+  let sh=0,sg=0,sn=0,se=0,lKey='',rows='';
+  sorted.forEach(r=>{
+    const rid=r.id,t=tT(r),ml=gML(r.machineId),s=gS(r.siteId),mg2=gMg(s.managerId).name;
+    sh+=t.h;sg+=t.g;sn+=t.n;se+=t.e;
+    const k=rKey(r);
+    if(showX&&k!==lKey){rows+=`<tr><td class="gh" colspan="40"><span class="tag ${vm.tc}" style="padding:2px 10px;font-size:11px">${k}</span></td></tr>`;lKey=k;}
+    rows+=`<tr>
+      <td class="sc" style="right:0"><div class="mname">${ml.name}</div><div class="ss">${ml.type} | ${r.owner}</div><div class="ss" style="color:var(--brand);font-weight:700;font-size:10px;">📅 ${r.monthLabel}</div>${(r.driver||gML(r.machineId).defaultDriver)?'<div class="ss" style="color:#2980b9;font-weight:700">👷🏽 '+(r.driver||gML(r.machineId).defaultDriver)+'</div>':''}</td>
+      <td class="sc" style="right:148px"><div style="font-weight:800;font-size:11px;color:var(--brand);line-height:1.3">${s.platform}</div><div class="ss" style="font-size:9.5px;line-height:1.4">📍 ${s.region}</div><div class="ss" style="font-size:9.5px;line-height:1.4">👤 ${mg2}</div></td>
+      ${showX?`<td><span class="tag ${vm.tc}" style="font-size:10px">${k}</span></td>`:''}
+      
+      ${r.hours.map((h,di)=>`<td class="${dc(h)}"><input class="hi" type="number" min="0" max="24" value="${h}" onchange="upH(${rid},${di},this.value)" aria-label="ساعات اليوم ${di+1}"></td>`).join('')}
+      <td class="agg">${t.h}</td><td class="agg">${t.d.toFixed(2)}</td>
+      <td class="agg"><input type="number" value="${r.dayPrice}" onchange="upP(${rid},this.value)" style="width:65px;border:1px solid var(--border);border-radius:6px;padding:3px;text-align:center;font-family:inherit;font-size:11px" aria-label="سعر اليوم"></td>
+      <td class="agg" style="color:var(--brand);font-weight:800">${fmt(t.g)}</td>
+      <td class="agg" style="color:var(--red)">${fmt(t.e)}</td>
+      <td class="agg" style="color:var(--green-dk);font-weight:800">${fmt(t.n)}</td>
+      <td class="agg" style="min-width:90px">
+        <button class="btn btn-light btn-xs" onclick="openExp(${rid})" title="المصاريف">💰</button>
+        <button class="btn btn-xs" onclick="togglePaid(${rid})" title="حالة الدفع" style="background:${r.paid?'var(--green-lt)':'var(--red-lt)'};color:${r.paid?'var(--green-dk)':'var(--red-dk)'};border:1px solid ${r.paid?'#86efac':'#fca5a5'}">${r.paid?'✓':'⏳'}</button>
+        <button class="btn btn-danger btn-xs" onclick="delA(${rid})">✕</button>
+      </td>
+    </tr>`;
+  });
+  rows+=`<tr style="background:var(--surface2)"><td class="sc" style="right:0;background:var(--surface2);font-size:10px;color:var(--text-muted);text-align:right">مجموع اليوم</td><td class="sc" style="right:148px;background:var(--surface2)"></td>${showX?'<td></td>':''}`+
+    dayT.map(v=>`<td style="font-size:10px;font-weight:700;color:var(--brand)">${v||''}</td>`).join('')+`<td colspan="7"></td></tr>`;
+  g$('TB').innerHTML=rows;
+  g$('TF').innerHTML=`<tr><th class="sc" style="right:0" colspan="${showX?3:2}">المجموع — ${filtered.length} آلة</th><td colspan="31"></td><th>${sh}</th><th>${(sh/8).toFixed(2)}</th><th>—</th><th style="color:var(--brand)">${fmt(sg)}</th><th style="color:var(--red)">${fmt(se)}</th><th style="color:var(--green-dk)">${fmt(sn)}</th><th></th></tr>`;
+  set$('cM',filtered.length); set$('cH',sh); set$('cG',fmt(sg)); set$('cN',fmt(sn));
+  set$('sH',sh+' ساعة'); set$('sG',fmt(sg)); set$('sE',fmt(se)); set$('sN',fmt(sn));
+  g$('cT').textContent='من أصل '+assignments.length+' إسناد';
+  renderReports();
+}
+
+function drillTo(k){const p=k.split('-');g$('selY').value=p[1];g$('selM').value=p[0];render();}
+function setV(el){curView=el.dataset.v;document.querySelectorAll('.vt').forEach(t=>t.classList.remove('active'));el.classList.add('active');render();}
+function resetF(){['fT','fR','fP','fMg'].forEach(id=>g$(id).value='');g$('fQ').value='';render();}
+function upH(rid,di,v){const r=assignments.find(a=>a.id===rid);if(r){r.hours[di]=Number(v||0);render();}}
+function upP(rid,v){const r=assignments.find(a=>a.id===rid);if(r){r.dayPrice=Number(v||0);render();}}
+function delA(rid){if(confirm('حذف هذا الإسناد؟')){const i=assignments.findIndex(a=>a.id===rid);if(i>=0){assignments.splice(i,1);render();}}}
+
+// ============================================================
+// REPORTS
+// ============================================================
+function renderReports(){
+  const bySM={};
+  assignments.forEach(r=>{
+    const t=tT(r),s=gS(r.siteId),k=r.siteId+'||'+r.month;
+    if(!bySM[k])bySM[k]={region:s.region,platform:s.platform,manager:gMg(s.managerId).name,m:r.monthLabel,cnt:0,h:0,d:0,g:0,e:0,n:0};
+    bySM[k].cnt++;bySM[k].h+=t.h;bySM[k].d+=t.d;bySM[k].g+=t.g;bySM[k].e+=t.e;bySM[k].n+=t.n;
+  });
+  g$('repBody').innerHTML=Object.values(bySM).map(v=>`<tr><td style="text-align:right">${v.region}</td><td style="text-align:right">${v.platform}</td><td style="text-align:right">${v.manager}</td><td>${v.m}</td><td>${v.cnt}</td><td>${v.h}</td><td>${v.d.toFixed(2)}</td><td style="color:var(--brand)">${fmt(v.g)}</td><td style="color:var(--red)">${fmt(v.e)}</td><td style="color:var(--green-dk)">${fmt(v.n)}</td></tr>`).join('');
+  const byM={};
+  assignments.forEach(r=>{const t=tT(r);if(!byM[r.month])byM[r.month]={l:r.monthLabel,cnt:0,h:0,g:0,e:0,n:0};byM[r.month].cnt++;byM[r.month].h+=t.h;byM[r.month].g+=t.g;byM[r.month].e+=t.e;byM[r.month].n+=t.n;});
+  g$('cmpBody').innerHTML=Object.values(byM).map(v=>`<tr><td style="text-align:right">${v.l}</td><td>${v.cnt}</td><td>${v.h}</td><td style="color:var(--brand)">${fmt(v.g)}</td><td style="color:var(--red)">${fmt(v.e)}</td><td style="color:var(--green-dk)">${fmt(v.n)}</td></tr>`).join('');
+}
+
+// ============================================================
+// PAGES
+// ============================================================
+function renderSites(){
+  if(!sites.length){g$('sitesGrid').innerHTML='<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted)">لا توجد مواقع بعد</div>';return;}
+  g$('sitesGrid').innerHTML=sites.map((s,i)=>`<div class="lcard"><div class="lt">📍 ${s.region}</div><div class="ln">${s.platform}</div><div class="lm">👤 ${gMg(s.managerId).name}</div><div class="lf"><span class="tag">${assignments.filter(a=>a.siteId===s.id).length} إسناد</span><button class="btn btn-danger btn-sm" onclick="delSite(${i})">حذف</button></div></div>`).join('');
+}
+function renderMgrs(){
+  g$('mgrList').innerHTML=managers.length?managers.map((m,i)=>`<div class="lrow"><div><strong>👤 ${m.name}</strong><div class="ss">${sites.filter(s=>s.managerId===m.id).length} موقع</div></div><button class="btn btn-danger btn-sm" onclick="delMgr(${i})">حذف</button></div>`).join(''):'<div style="text-align:center;padding:30px;color:var(--text-muted)">لا يوجد مديرون</div>';
+}
+function renderMachLib(){
+  if(!machLib.length){g$('machList').innerHTML='<div style="text-align:center;padding:30px;color:var(--text-muted)">لا توجد آلات</div>';return;}
+  const types=[...new Set(machLib.map(m=>m.type))].sort();
+  g$('machList').innerHTML=types.map(t=>`<div class="tgrp"><div class="tgh">🏗 ${t} — ${machLib.filter(m=>m.type===t).length} آلة</div>${machLib.filter(m=>m.type===t).map(m=>`<div class="lrow"><div><strong>${m.name}</strong><div class="ss">${assignments.filter(a=>a.machineId===m.id).length} إسناد</div></div><button class="btn btn-danger btn-sm" onclick="delMach('${m.id}')">حذف</button></div>`).join('')}</div>`).join('');
+}
+
+function goToMachSheet(machId){
+  const m = machLib.find(x => x.id === machId);
+  if(!m) return;
+  ['fT','fR','fP','fMg'].forEach(id => { const el=g$(id); if(el) el.value=''; });
+  const fq = g$('fQ'); if(fq) fq.value = m.name;
+  document.querySelectorAll('.sec').forEach(s => s.classList.remove('active'));
+  const dash = g$('dashboard'); if(dash) dash.classList.add('active');
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  const navBtns = document.querySelectorAll('.nav button');
+  if(navBtns.length) navBtns[0].classList.add('active');
+  const b = g$('banner');
+  if(b){ b.style.display='block'; b.innerHTML='<strong>📊 '+m.name+'</strong> — <a href="#" onclick="resetF();this.closest(\'div\').style.display=\'none\';return false;" style="color:var(--accent)">مسح الفلتر</a>'; }
+  render();
+}
+function goTo(id,btn){
+  document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
+  g$(id).classList.add('active');
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+  if(btn)btn.classList.add('active');
+  if(id==='sitesPage')renderSites();
+  if(id==='managersPage')renderMgrs();
+  if(id==='machinesLib')renderMachLib();
+}
+
+// ============================================================
+// MODALS
+// ============================================================
+function openM(id){
+  if(id==='mAssign'){
+    const ownM  = machLib.filter(m=>(m.ownership||'own')!=='rented');
+    const rentM = machLib.filter(m=>(m.ownership||'own')==='rented');
+    g$('aaMach').innerHTML=
+      '<option value="">— اختر الآلة —</option>'+
+      (ownM.length  ? `<optgroup label="🟢 آلاتي الخاصة">${ownM.map(m=>`<option value="${m.id}">${m.name} (${m.type})</option>`).join('')}</optgroup>` : '')+
+      (rentM.length ? `<optgroup label="🟠 الآلات المستأجرة">${rentM.map(m=>`<option value="${m.id}">${m.name} (${m.type}) — كراء: ${(m.myRentalCost||0).toLocaleString('fr-FR')} دج/يوم</option>`).join('')}</optgroup>` : '');
+    g$('aaSite').innerHTML='<option value="">— اختر الموقع —</option>'+sites.map(s=>`<option value="${s.id}">${s.platform} | ${s.region} | 👤 ${gMg(s.managerId).name}</option>`).join('');
+    g$('aaMach').onchange=function(){
+      const ml=machLib.find(m=>m.id===this.value);
+      const badge=g$('aaMachBadge');
+      if(!ml){ badge.style.display='none'; return; }
+      if(ml.defaultDriver) g$('aaDriver').value=ml.defaultDriver;
+      const isRent=ml.ownership==='rented';
+      badge.style.display='block';
+      badge.style.background=isRent?'var(--amber-lt)':'#f0fdf4';
+      badge.style.border='1px solid '+(isRent?'#fde68a':'#86efac');
+      badge.style.color=isRent?'var(--amber-dk)':'var(--green-dk)';
+      badge.innerHTML=isRent
+        ? '🟠 آلة مستأجرة — سيُخصم <strong>'+(ml.myRentalCost||0).toLocaleString('fr-FR')+' دج/يوم</strong> تلقائياً من صافيك'
+        : '🟢 آلتك الخاصة — كل الإيراد لصالحك بعد المصاريف';
+    };
+    const curY=g$('selY').value||'2026', curM=g$('selM').value||new Date().getMonth()+1+'';
+    if(g$('aaYear'))  g$('aaYear').value  = curY;
+    if(g$('aaMonthNum')) g$('aaMonthNum').value = curM;
+    syncAssignMonth();
+  }
+  if(id==='mSite'){
+    g$('nsMgr').innerHTML='<option value="">— اختر المدير —</option>'+managers.map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
+  }
+  if(id==='mMonth'){updateMonthPreview();}
+  if(id==='mMachine'){
+    g$('typesDL').innerHTML=[...new Set(machLib.map(m=>m.type))].sort().map(t=>`<option value="${t}">`).join('');
+  }
+  g$(id).classList.add('open');
+}
+function closeM(id){g$(id).classList.remove('open');}
+document.querySelectorAll('.ov').forEach(o=>o.addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');}));
+
+// Close modal on Escape key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.ov.open').forEach(o => o.classList.remove('open'));
+  }
+});
+
+// ============================================================
+// SAVE ACTIONS
+// ============================================================
+function saveAssign(){
+  const mId=g$('aaMach').value,own=g$('aaOwn').value.trim();
+  const yr2=g$('aaYear').value, mo2=g$('aaMonthNum').value;
+  const sId=g$('aaSite').value,pr=Number(g$('aaPrice').value||0);
+  if(!mId||!own||!yr2||!mo2||!sId||!pr){alert('يرجى ملء جميع الحقول');return;}
+  const mk=mo2+'-'+yr2;
+  const ml2=MN[parseInt(mo2)-1]+' '+yr2;
+  const ml=ml2;
+  if(!monthList.find(m=>m.k===mk)) monthList.push({k:mk,l:ml});
+  const drv=g$('aaDriver').value.trim();
+  assignments.push({id:Date.now(),machineId:mId,owner:own,driver:drv,siteId:sId,month:mk,monthLabel:ml,dayPrice:pr,hours:Array(31).fill(0),expenses:[],paid:false});
+  closeM('mAssign');
+  ['aaOwn','aaPrice','aaDriver'].forEach(id=>g$(id).value='');
+  buildSelectors();
+  g$('selY').value=yr2; g$('selM').value=mo2;
+  render();
+}
+
+function saveMonth(){
+  const mo=g$('nmM').value, yr=g$('nmY').value.trim();
+  if(!mo||!yr||yr.length!==4){alert('يرجى اختيار الشهر وإدخال السنة بـ 4 أرقام');return;}
+  const k=mo+'-'+yr;
+  const l=MN[parseInt(mo)-1]+' '+yr;
+  if(monthList.find(m=>m.k===k)){alert('هذا الشهر موجود بالفعل: '+l);return;}
+  monthList.push({k,l});
+  closeM('mMonth');
+  buildSelectors();
+  g$('selY').value=yr; g$('selM').value=mo;
+  render();
+}
+
+function updateMonthPreview(){
+  const mo=g$('nmM'), yr=g$('nmY');
+  if(!mo||!yr) return;
+  const l=MN[parseInt(mo.value)-1]+' '+yr.value;
+  const prev=g$('nmPreview');
+  if(prev) prev.textContent='📅 '+l;
+}
+
+function saveSite(){
+  const r=g$('nsReg').value.trim(),p=g$('nsPlt').value.trim(),m=g$('nsMgr').value;
+  if(!r||!p||!m){alert('يرجى ملء جميع الحقول');return;}
+  sites.push({id:'s'+Date.now(),region:r,platform:p,managerId:m});
+  ['nsReg','nsPlt'].forEach(id=>g$(id).value='');g$('nsMgr').value='';
+  closeM('mSite');renderSites();buildSelectors();
+}
+
+function saveMgr(){
+  const n=g$('mgN').value.trim();
+  if(!n){alert('أدخل اسم المدير');return;}
+  managers.push({id:'mg'+Date.now(),name:n});
+  g$('mgN').value='';closeM('mManager');renderMgrs();buildSelectors();
+}
+
+function saveMach(){
+  const n=g$('mcN').value.trim(),t=g$('mcT').value.trim();
+  const own=g$('mcOwn').value;
+  const rate=own==='rented'?Number(g$('mcRate').value||0):0;
+  if(!n||!t){alert('يرجى إدخال الاسم والنوع');return;}
+  machLib.push({id:'ml'+Date.now(),name:n,type:t,ownership:own,myRentalCost:rate});
+  g$('mcN').value='';g$('mcT').value='';g$('mcOwn').value='own';g$('mcRate').value='';
+  g$('mcRateBox').style.display='none';
+  closeM('mMachine');renderMachLib();buildSelectors();
+}
+
+function delSite(i){
+  if(assignments.some(a=>a.siteId===sites[i].id)&&!confirm('هذا الموقع مستخدم، هل تريد الحذف؟'))return;
+  if(!assignments.some(a=>a.siteId===sites[i].id)&&!confirm('حذف: '+sites[i].platform+'؟'))return;
+  sites.splice(i,1);renderSites();buildSelectors();render();
+}
+function delMgr(i){
+  if(sites.some(s=>s.managerId===managers[i].id)){alert('هذا المدير مرتبط بموقع');return;}
+  if(confirm('حذف: '+managers[i].name+'؟')){managers.splice(i,1);renderMgrs();buildSelectors();}
+}
+function delMach(id){
+  const i=machLib.findIndex(m=>m.id===id);if(i<0)return;
+  if(assignments.some(a=>a.machineId===id)){alert('هذه الآلة مستخدمة في إسنادات');return;}
+  if(confirm('حذف: '+machLib[i].name+'؟')){machLib.splice(i,1);renderMachLib();buildSelectors();}
+}
+
+// ============================================================
+// EXPENSES
+// ============================================================
+function openExp(rid){
+  expIdx=assignments.findIndex(a=>a.id===rid);
+  const r=assignments[expIdx],ml=gML(r.machineId),s=gS(r.siteId);
+  g$('expT').textContent='مصاريف: '+ml.name;
+  g$('expS').textContent=s.platform+' — '+r.monthLabel+' — '+r.owner;
+  g$('eMach').textContent=ml.name+' / '+r.owner;
+  g$('eReg').textContent=s.region;g$('ePlat').textContent=s.platform;
+  g$('eMgr').textContent=gMg(s.managerId).name;
+  g$('expBtn').style.display='block';
+  renderExp();goTo('expensePage',g$('expBtn'));
+}
+function renderExp(){
+  const r=assignments[expIdx],t=tT(r);
+  g$('eTotal').textContent=fmt(t.e);
+  g$('expRows').innerHTML=r.expenses.length?r.expenses.map((e,i)=>`<tr>
+    <td style="text-align:right"><input value="${e.label}" onchange="upEF(${i},'label',this.value)"></td>
+    <td><select onchange="upEF(${i},'cat',this.value)">${['وقود','صيانة','راتب السائق','نقل','زيت','أخرى'].map(x=>`<option ${e.cat===x?'selected':''} >${x}</option>`).join('')}</select></td>
+    <td><input type="number" value="${e.amount}" onchange="upEF(${i},'amount',this.value)"></td>
+    <td><input value="${e.note||''}" onchange="upEF(${i},'note',this.value)"></td>
+    <td><button class="btn btn-danger btn-sm" onclick="delE(${i})">✕</button></td>
+  </tr>`).join(''):'<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted)">لا توجد مصاريف — أضف بنداً</td></tr>';
+}
+function upEF(i,k,v){assignments[expIdx].expenses[i][k]=k==='amount'?Number(v||0):v;renderExp();render();}
+function delE(i){assignments[expIdx].expenses.splice(i,1);renderExp();render();}
+function addExpRow(){assignments[expIdx].expenses.push({label:'مصروف',cat:'أخرى',amount:0,note:''});renderExp();}
+function addP(n){assignments[expIdx].expenses.push({label:n,cat:n,amount:0,note:''});renderExp();}
+
+// ============================================================
+// EXPORT / IMPORT
+// ============================================================
+function doExport(){
+  const b=new Blob([JSON.stringify({managers,sites,machLib,assignments,monthList},null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='كراء-الآلات-v10.json';a.click();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+buildSelectors();
+g$('selY').value='2025';
+g$('selM').value='12';
+render();
+
+// ============================================================
+// ZOOM
+// ============================================================
+let zoomLevel = 100;
+function zoom(dir) {
+  if (dir === 0) { zoomLevel = 100; }
+  else { zoomLevel = Math.min(150, Math.max(60, zoomLevel + dir * 10)); }
+  document.body.style.zoom = zoomLevel + '%';
+  document.getElementById('zLbl').textContent = zoomLevel + '%';
+  localStorage.setItem('zoom', zoomLevel);
+}
+
+// ============================================================
+// SAVE / LOAD (localStorage + file download)
+// ============================================================
+function saveData() {
+  const data = JSON.stringify({ managers, sites, machLib, assignments, monthList }, null, 2);
+  localStorage.setItem('kraaMachinesData', data);
+  const blob = new Blob([data], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const d = new Date();
+  a.download = `كراء-الآلات-${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}.json`;
+  a.click();
+  showToast('✅ تم الحفظ بنجاح');
+}
+
+function loadData() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json';
+  inp.onchange = function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        const d = JSON.parse(ev.target.result);
+        if (d.managers)   managers.splice(0, managers.length,   ...d.managers);
+        if (d.sites)      sites.splice(0, sites.length,         ...d.sites);
+        if (d.machLib)    machLib.splice(0, machLib.length,      ...d.machLib);
+        if (d.assignments)assignments.splice(0,assignments.length,...d.assignments);
+        if (d.monthList)  monthList.splice(0, monthList.length,  ...d.monthList);
+        buildSelectors(); render(); renderReports();
+        showToast('✅ تم تحميل البيانات بنجاح');
+      } catch(err) { alert('خطأ في قراءة الملف: ' + err.message); }
+    };
+    reader.readAsText(file);
+  };
+  inp.click();
+}
+
+// ============================================================
+// TOAST
+// ============================================================
+function showToast(msg) {
+  let t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.opacity = '0'; }, 2800);
+}
+
+// ============================================================
+// AUTO-SAVE (silent, localStorage)
+// ============================================================
+const _origUpH = upH, _origUpP = upP, _origDelA = delA;
+upH = function(ri,di,v){ _origUpH(ri,di,v); autoSave(); };
+upP = function(ri,v){ _origUpP(ri,v); autoSave(); };
+delA = function(ri){ _origDelA(ri); autoSave(); };
+
+function autoSave() {
+  localStorage.setItem('kraaMachinesData',
+    JSON.stringify({ managers, sites, machLib, assignments, monthList }));
+}
+
+// ============================================================
+// LOAD FROM LOCALSTORAGE ON STARTUP
+// ============================================================
+(function initFromStorage() {
+  const saved = localStorage.getItem('kraaMachinesData');
+  if (!saved) return;
+  try {
+    const d = JSON.parse(saved);
+    if (d.managers)    managers.splice(0, managers.length,    ...d.managers);
+    if (d.sites)       sites.splice(0, sites.length,          ...d.sites);
+    if (d.machLib)     machLib.splice(0, machLib.length,       ...d.machLib);
+    if (d.assignments) assignments.splice(0, assignments.length,...d.assignments);
+    if (d.monthList)   monthList.splice(0, monthList.length,   ...d.monthList);
+  } catch(e) { console.warn('localStorage parse error', e); }
+  const z = localStorage.getItem('zoom');
+  if (z) { zoomLevel = parseInt(z); document.body.style.zoom = zoomLevel+'%'; document.getElementById('zLbl').textContent = zoomLevel+'%'; }
+})();
+
+// ============================================================
+// QUICK FILL ROW
+// ============================================================
+function fillRow(rid, val) {
+  const r=assignments.find(a=>a.id===rid);
+  if(r){r.hours=Array(31).fill(val);autoSave();render();}
+}
+
+// ============================================================
+// TOGGLE PAID
+// ============================================================
+function togglePaid(rid) {
+  const r=assignments.find(a=>a.id===rid);
+  if(r){r.paid=!r.paid;autoSave();render();}
+}
+
+// ============================================================
+// COPY MONTH
+// ============================================================
+function openCopyModal() {
+  // عرض جميع الأشهر من 2020 حتى 2030
+  const allMonths = [];
+  const existing = new Set(monthList.map(m => m.k));
+  for (let y = 2020; y <= 2030; y++) {
+    for (let mo = 1; mo <= 12; mo++) {
+      const k = mo + '-' + y;
+      const l = MN[mo-1] + ' ' + y;
+      allMonths.push({k, l});
+    }
+  }
+  const sel = () => allMonths.map(m =>
+    `<option value="${m.k}" style="${existing.has(m.k)?'font-weight:700':'color:#aaa'}">${m.l}${existing.has(m.k)?'':' ✦'}</option>`
+  ).join('');
+  document.getElementById('cpFrom').innerHTML = sel();
+  document.getElementById('cpTo').innerHTML   = sel();
+  // تحديد الشهر الحالي كمصدر والشهر التالي كهدف
+  const curY = document.getElementById('selY')?.value || '2026';
+  const curM = document.getElementById('selM')?.value || '1';
+  const curK = curM + '-' + curY;
+  document.getElementById('cpFrom').value = curK;
+  const idx = allMonths.findIndex(m => m.k === curK);
+  if (idx >= 0 && idx + 1 < allMonths.length)
+    document.getElementById('cpTo').value = allMonths[idx+1].k;
+  updateCopyPreview();
+  document.getElementById('cpFrom').onchange = updateCopyPreview;
+  document.getElementById('cpTo').onchange   = updateCopyPreview;
+}
+
+function updateCopyPreview() {
+  const from = document.getElementById('cpFrom').value;
+  const to   = document.getElementById('cpTo').value;
+  const fromL = monthList.find(m => m.k === from)?.l || from;
+  const toL   = monthList.find(m => m.k === to)?.l   || to;
+  const cnt   = assignments.filter(a => a.month === from).length;
+  const prev  = document.getElementById('cpPreview');
+  if (from === to) { prev.textContent = '⚠️ اختر شهرين مختلفين'; return; }
+  const existing = assignments.filter(a => a.month === to).length;
+  prev.innerHTML = `<strong>${cnt} آلة</strong> من <em>${fromL}</em> ← ستُنسخ إلى <em>${toL}</em>`
+    + (existing ? `<br><span style="color:var(--red)">⚠️ يوجد ${existing} آلة في الهدف — ستُضاف فوقها</span>` : '');
+}
+
+function doCopy() {
+  const from = document.getElementById('cpFrom').value;
+  const to   = document.getElementById('cpTo').value;
+  if (from === to) { alert('اختر شهرين مختلفين'); return; }
+  // إضافة الشهر الهدف تلقائياً إلى monthList إذا لم يكن موجوداً
+  let toML = monthList.find(m => m.k === to);
+  if (!toML) {
+    const parts = to.split('-');
+    const label = MN[parseInt(parts[0])-1] + ' ' + parts[1];
+    monthList.push({k: to, l: label});
+    toML = monthList.find(m => m.k === to);
+    buildSelectors();
+  }
+  const src = assignments.filter(a => a.month === from);
+  if (!src.length) { alert('لا توجد آلات في الشهر المصدر'); return; }
+  src.forEach(r => {
+    assignments.push({
+      id: Date.now() + Math.random(),
+      machineId: r.machineId, owner: r.owner,
+      siteId: r.siteId, month: to, monthLabel: toML.l,
+      dayPrice: r.dayPrice, hours: Array(31).fill(0),
+      expenses: [], paid: false
+    });
+  });
+  closeM('mCopy');
+  const p = to.split('-');
+  document.getElementById('selY').value = p[1];
+  document.getElementById('selM').value = p[0];
+  autoSave(); render();
+  showToast(`✅ تم نسخ ${src.length} آلة إلى ${toML.l}`);
+}
+
+const _origOpenM = openM;
+openM = function(id) {
+  if (id === 'mCopy') { _origOpenM(id); openCopyModal(); return; }
+  _origOpenM(id);
+};
+
+// ============================================================
+// MINI MONTHLY CHART
+// ============================================================
+function renderMiniChart() {
+  const byM = {};
+  assignments.forEach(r => {
+    if (!byM[r.month]) byM[r.month] = { l: r.monthLabel, n: 0 };
+    byM[r.month].n += tT(r).n;
+  });
+  const vals = Object.values(byM);
+  if (!vals.length) return;
+  const max = Math.max(...vals.map(v => v.n));
+  const el = document.getElementById('miniChart');
+  if (!el) return;
+  el.innerHTML = vals.map(v => {
+    const pct = max ? Math.round(v.n / max * 100) : 0;
+    const parts = Object.keys(byM).find(k => byM[k] === v)?.split('-') || [];
+    const mo = parts[0] ? MN[parseInt(parts[0])-1]?.slice(0,3) || parts[0] : '';
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1">
+      <div style="height:${pct*0.6+4}px;background:var(--brand);border-radius:4px 4px 0 0;width:100%;min-height:4px;transition:.3s" title="${v.l}: ${fmt(v.n)}"></div>
+      <span style="font-size:9px;color:var(--text-muted)">${mo}</span>
+    </div>`;
+  }).join('');
+}
+
+const _origRender = render;
+render = function() {
+  _origRender();
+  renderMiniChart();
+};
+
+// ============================================================
+// PAYMENTS PAGE
+// ============================================================
+function renderPayments() {
+  ['pfMonth1','pfMonth2'].forEach(id => {
+    const el = document.getElementById(id), cur = el.value;
+    el.innerHTML = '<option value="">كل الأشهر</option>' +
+      monthList.map(m => `<option value="${m.k}" ${m.k===cur?'selected':''}>${m.l}</option>`).join('');
+  });
+  ['pfSite1','pfSite2'].forEach(id => {
+    const el = document.getElementById(id), cur = el.value;
+    el.innerHTML = '<option value="">الكل</option>' +
+      sites.map(s => `<option value="${s.id}" ${s.id===cur?'selected':''}>${s.platform}</option>`).join('');
+  });
+
+  const mo1 = document.getElementById('pfMonth1').value;
+  const si1 = document.getElementById('pfSite1').value;
+  const mo2 = document.getElementById('pfMonth2').value;
+  const si2 = document.getElementById('pfSite2').value;
+
+  const paid = assignments.filter(a => a.paid  && (!mo1||a.month===mo1) && (!si1||a.siteId===si1));
+  const pend = assignments.filter(a => !a.paid && (!mo2||a.month===mo2) && (!si2||a.siteId===si2));
+
+  const allPaid = assignments.filter(a => a.paid);
+  const allPend = assignments.filter(a => !a.paid);
+  const totPaid = allPaid.reduce((s,r) => s + tT(r).n, 0);
+  const totPend = allPend.reduce((s,r) => s + tT(r).n, 0);
+  const totAll  = totPaid + totPend;
+  const rate    = totAll ? Math.round(totPaid / totAll * 100) : 0;
+
+  document.getElementById('pKpiPaid').textContent    = fmt(totPaid);
+  document.getElementById('pKpiPaidCnt').textContent  = allPaid.length + ' فاتورة';
+  document.getElementById('pKpiPend').textContent    = fmt(totPend);
+  document.getElementById('pKpiPendCnt').textContent  = allPend.length + ' فاتورة';
+  document.getElementById('pKpiRate').textContent    = rate + '%';
+  document.getElementById('pKpiTotal').textContent   = fmt(totAll);
+  document.getElementById('pKpiTotalCnt').textContent = assignments.length + ' إسناد';
+
+  document.getElementById('pBar').style.width = rate + '%';
+  document.getElementById('pBarLbl').textContent = rate + '% محصّل';
+
+  function mkRows(list, isPaid) {
+    if (!list.length) return `<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted)">لا توجد فواتير ${isPaid?'مدفوعة':'معلّقة'}</td></tr>`;
+    return list.map(r => {
+      const rid = r.id, t = tT(r);
+      const ml = gML(r.machineId), s = gS(r.siteId);
+      return `<tr style='background:${ml.ownership==="rented"?"#fffbeb":"#f0fdf4"};border-right:3px solid ${ml.ownership==="rented"?"#fde68a":"#86efac"}'>
+        <td style="text-align:right"><div style="font-weight:700;font-size:11px">${ml.name}</div><div class="ss">${r.owner}</div></td>
+        <td style="text-align:right"><div style="font-size:11px;color:var(--brand)">${s.platform}</div><div class="ss">${s.region}</div></td>
+        <td style="font-size:11px">${r.monthLabel}</td>
+        <td style="font-weight:800;color:${isPaid?'var(--green-dk)':'var(--amber)'}">${fmt(t.n)}</td>
+        <td><button class="btn btn-xs" onclick="togglePaid(${rid});renderPayments()" style="background:${isPaid?'var(--red-lt)':'var(--green-lt)'};color:${isPaid?'var(--red-dk)':'var(--green-dk)'};border:1px solid ${isPaid?'#fca5a5':'#86efac'}">${isPaid?'↩ معلّق':'✓ دفع'}</button></td>
+      </tr>`;
+    }).join('');
+  }
+
+  const paidN = paid.reduce((s,r) => s + tT(r).n, 0);
+  const pendN = pend.reduce((s,r) => s + tT(r).n, 0);
+
+  document.getElementById('paidBody').innerHTML = mkRows(paid, true);
+  document.getElementById('pendBody').innerHTML = mkRows(pend, false);
+  document.getElementById('paidTotal').textContent = fmt(paidN);
+  document.getElementById('pendTotal').textContent = fmt(pendN);
+  document.getElementById('paidSub').textContent = paid.length + ' آلة — ' + fmt(paidN);
+  document.getElementById('pendSub').textContent = pend.length + ' آلة — ' + fmt(pendN);
+
+  const bySM = {};
+  assignments.forEach(r => {
+    const k = r.siteId + '||' + r.month;
+    if (!bySM[k]) bySM[k] = { s: gS(r.siteId), m: r.monthLabel, cnt: 0, paid: 0, pend: 0 };
+    const n = tT(r).n;
+    bySM[k].cnt++;
+    if (r.paid) bySM[k].paid += n; else bySM[k].pend += n;
+  });
+  document.getElementById('pSiteBody').innerHTML = Object.values(bySM).map(v => {
+    const tot = v.paid + v.pend;
+    const allP = v.pend === 0;
+    return `<tr style="${allP ? 'background:#f0fdf4' : ''}">
+      <td style="text-align:right;font-weight:700;color:var(--brand)">${v.s.platform}</td>
+      <td style="text-align:right">${v.s.region}</td>
+      <td>${v.m}</td><td>${v.cnt}</td>
+      <td style="color:var(--green-dk);font-weight:700">${fmt(v.paid)}</td>
+      <td style="color:${v.pend?'var(--amber)':'var(--green-dk)'};font-weight:700">${v.pend ? fmt(v.pend) : '✅ مكتمل'}</td>
+      <td style="font-weight:700">${fmt(tot)}</td>
+      <td>${allP ? '<span class="tag tag-g">✓ مسدّد</span>' : `<span class="tag tag-o">${Math.round(v.paid/tot*100)}% محصّل</span>`}</td>
+    </tr>`;
+  }).join('');
+}
+
+function markAllPaid(val) {
+  if (!confirm(val ? 'تحديد كل الإسنادات كـ مدفوعة؟' : 'تحديد كل الإسنادات كـ معلّقة؟')) return;
+  assignments.forEach(a => a.paid = val);
+  autoSave(); renderPayments();
+  showToast(val ? '✅ تم تحديد الكل مدفوع' : '⏳ تم تحديد الكل معلّق');
+}
+
+const _origGoTo = goTo;
+goTo = function(id, btn) {
+  _origGoTo(id, btn);
+  if (id === 'paymentsPage') renderPayments();
+};
+
+// ============================================================
+// OWNERSHIP FILTER
+// ============================================================
+let curOwn = 'all';
+function setOwn(el) {
+  curOwn = el.dataset.own;
+  document.querySelectorAll('[data-own]').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+
+// ============================================================
+// OWNERSHIP KPI CARDS
+// ============================================================
+function renderOwnershipKPIs() {
+  const ownIds  = new Set(machLib.filter(m => m.ownership !== 'rented').map(m => m.id));
+  const rentIds = new Set(machLib.filter(m => m.ownership === 'rented').map(m => m.id));
+  const sum = (list) => list.reduce((acc,r)=>{const t=tT(r);acc.g+=t.g;acc.n+=t.n;acc.rc+=(t.rc||0);acc.e+=t.e;return acc;},{g:0,n:0,rc:0,e:0});
+  const ownC  = sum(assignments.filter(a => ownIds.has(a.machineId)));
+  const rentC = sum(assignments.filter(a => rentIds.has(a.machineId)));
+  let box = document.getElementById('ownershipKPI');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'ownershipKPI';
+    box.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:9px';
+    const stats = document.querySelector('#dashboard .stats');
+    if (stats) stats.insertAdjacentElement('afterend', box);
+  }
+  box.innerHTML = `
+    <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:14px;padding:13px;display:flex;gap:10px;align-items:center">
+      <span style="font-size:28px">🟢</span>
+      <div>
+        <div style="font-size:11px;color:var(--green-dk);font-weight:700">آلاتي الخاصة — ${assignments.filter(a=>ownIds.has(a.machineId)).length} إسناد</div>
+        <div style="font-size:20px;font-weight:800;color:var(--green-dk)">${fmt(ownC.n)}</div>
+        <div style="font-size:10px;color:var(--text-muted)">المبلغ: ${fmt(ownC.g)} | مصاريف: ${fmt(ownC.e)}</div>
+      </div>
+    </div>
+    <div style="background:var(--amber-lt);border:1px solid #fde68a;border-radius:14px;padding:13px;display:flex;gap:10px;align-items:center">
+      <span style="font-size:28px">🟠</span>
+      <div>
+        <div style="font-size:11px;color:var(--amber-dk);font-weight:700">الآلات المستأجرة — ${assignments.filter(a=>rentIds.has(a.machineId)).length} إسناد</div>
+        <div style="font-size:20px;font-weight:800;color:var(--amber-dk)">${fmt(rentC.n)}</div>
+        <div style="font-size:10px;color:var(--text-muted)">المبلغ: ${fmt(rentC.g)} | كراء دفعته: ${fmt(rentC.rc)} | مصاريف: ${fmt(rentC.e)}</div>
+      </div>
+    </div>`;
+}
+
+// ============================================================
+// PATCH RENDER FOR OWNERSHIP FILTER
+// ============================================================
+const _origRenderOwn = render;
+render = function() {
+  if (curOwn !== 'all') {
+    const allowed = new Set(machLib.filter(m => m.ownership === curOwn).map(m => m.id));
+    const backup = assignments.splice(0);
+    backup.filter(a => allowed.has(a.machineId)).forEach(a => assignments.push(a));
+    _origRenderOwn();
+    assignments.splice(0);
+    backup.forEach(a => assignments.push(a));
+  } else {
+    _origRenderOwn();
+  }
+  renderOwnershipKPIs();
+};
+
+// ============================================================
+// MACHINE LIBRARY: OWNERSHIP SECTIONS
+// ============================================================
+const _origRenderMachLib = renderMachLib;
+renderMachLib = function() {
+  if (!machLib.length) { g$('machList').innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-muted)">لا توجد آلات</div>'; return; }
+  const sections = [
+    { label:'🟢 آلاتي الخاصة', bg:'#f0fdf4', border:'#86efac', color:'var(--green-dk)', items: machLib.filter(m => m.ownership !== 'rented') },
+    { label:'🟠 الآلات المستأجرة', bg:'var(--amber-lt)', border:'#fde68a', color:'var(--amber-dk)', items: machLib.filter(m => m.ownership === 'rented') }
+  ];
+  g$('machList').innerHTML = sections.map(sec => !sec.items.length ? '' : `
+    <div style="background:${sec.bg};border:2px solid ${sec.border};border-radius:13px;padding:13px;margin-bottom:11px">
+      <div style="font-weight:800;color:${sec.color};font-size:13px;margin-bottom:9px">${sec.label} — ${sec.items.length} آلة</div>
+      ${sec.items.map(m => `<div class="lrow" style="cursor:pointer" onclick="goToMachSheet('${m.id}')">
+        <div style="flex:1">
+          <strong style="color:var(--brand);text-decoration:underline dotted;font-size:13px">${m.name}</strong>
+          <span style="font-size:9px;margin-right:5px;background:${m.ownership==='rented'?'var(--amber-lt)':'var(--green-lt)'};color:${m.ownership==='rented'?'var(--amber-dk)':'var(--green-dk)'};padding:1px 6px;border-radius:999px">${m.type}</span>
+          <div class="ss">${assignments.filter(a=>a.machineId===m.id).length} إسناد${m.ownership==='rented'?' | كراء: '+(m.myRentalCost||0).toLocaleString('fr-FR')+' دج/يوم':''}${m.defaultDriver?' | 👷🏽 '+m.defaultDriver:''}</div>
+        </div>
+        <div style="display:flex;gap:4px" onclick="event.stopPropagation()">
+          <button class="btn btn-light btn-sm" onclick="openEditMach('${m.id}')" title="تعديل">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="delMach('${m.id}')" title="حذف">🗑</button>
+        </div>
+      </div>`).join('')}
+    </div>`
+  ).join('');
+};
+
+// ============================================================
+// EDIT MACHINE
+// ============================================================
+function openEditMach(id) {
+  const m = machLib.find(x => x.id === id);
+  if (!m) return;
+  document.getElementById('emId').value   = id;
+  document.getElementById('emN').value    = m.name;
+  document.getElementById('emT').value    = m.type;
+  document.getElementById('emOwn').value   = m.ownership || 'own';
+  document.getElementById('emRate').value  = m.myRentalCost || 0;
+  document.getElementById('emDriver').value = m.defaultDriver || '';
+  document.getElementById('emRateBox').style.display = (m.ownership==='rented')?'block':'none';
+  document.getElementById('mEditMach').classList.add('open');
+}
+
+function saveEditMach() {
+  const id   = document.getElementById('emId').value;
+  const n    = document.getElementById('emN').value.trim();
+  const t    = document.getElementById('emT').value.trim();
+  const own  = document.getElementById('emOwn').value;
+  const rate = own === 'rented' ? Number(document.getElementById('emRate').value || 0) : 0;
+  const drv  = document.getElementById('emDriver').value.trim();
+  if (!n || !t) { alert('يرجى إدخال الاسم والنوع'); return; }
+  const m = machLib.find(x => x.id === id);
+  if (!m) return;
+  m.name=n; m.type=t; m.ownership=own; m.myRentalCost=rate; m.defaultDriver=drv;
+  if(drv) assignments.filter(a=>a.machineId===id&&!a.driver).forEach(a=>{a.driver=drv;});
+  closeM('mEditMach');
+  renderMachLib(); buildSelectors(); autoSave(); render();
+  showToast('✅ تم تعديل الآلة: ' + n);
+}
+
+// ============================================================
+// MACHINE TYPE CARDS (interactive)
+// ============================================================
+const FIXED_TYPES = [
+  {key:'Poclain',   ico:'⛏'},
+  {key:'Bull',      ico:'🚜'},
+  {key:'Chargeur',  ico:'🏗'},
+  {key:'Camion',    ico:'🚛'},
+  {key:'Camion citerne', ico:'🛢'},
+  {key:'Niveleuse', ico:'📐'},
+  {key:'Compacteur',ico:'🔩'},
+  {key:'Grue',      ico:'🏛'},
+  {key:'Scraper',   ico:'🔧'},
+  {key:'Autres',    ico:'⚙️'}
+];
+
+let activeTypeOwn  = null;
+let activeTypeRent = null;
+
+renderMachLib = function() {
+  machLib.forEach(m => { if(!m.ownership) m.ownership='own'; if(!m.myRentalCost) m.myRentalCost=0; });
+
+  const extraTypes = [...new Set(machLib.map(m=>m.type))]
+    .filter(t => !FIXED_TYPES.find(f=>f.key===t))
+    .map(t=>({key:t, ico:'⚙️'}));
+  const allTypes = [...FIXED_TYPES, ...extraTypes];
+
+  const sections = [
+    { key:'own',    label:'🟢 آلاتي الخاصة',    bg:'#f0fdf4',       border:'#86efac', color:'var(--green-dk)', cardBg:'var(--green-lt)', activeClass:'active-own',  activeVar:'activeTypeOwn'  },
+    { key:'rented', label:'🟠 الآلات المستأجرة', bg:'var(--amber-lt)', border:'#fde68a', color:'var(--amber-dk)', cardBg:'#fef3c7',         activeClass:'active-rent', activeVar:'activeTypeRent' }
+  ];
+
+  g$('machList').innerHTML = sections.map(sec => {
+    const secMachines = machLib.filter(m => (m.ownership||'own') === sec.key);
+    if (!secMachines.length) return `
+      <div style="background:${sec.bg};border:2px dashed ${sec.border};border-radius:13px;padding:14px 16px;margin-bottom:12px;text-align:center;opacity:.7">
+        <strong style="color:${sec.color}">${sec.label}</strong>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:5px">لا توجد آلات — أضف آلة واختر ملكيتها</div>
+      </div>`;
+
+    const relevantTypes = allTypes.filter(t => secMachines.some(m => m.type === t.key));
+    const activeType = sec.key === 'own' ? activeTypeOwn : activeTypeRent;
+
+    const typeCards = relevantTypes.map(t => {
+      const cnt = secMachines.filter(m => m.type === t.key).length;
+      const isActive = activeType === t.key;
+      return `<div class="type-card ${isActive ? sec.activeClass : ''}"
+        style="background:${isActive ? sec.cardBg : '#fff'};border-color:${isActive ? sec.color : 'var(--border)'}"
+        onclick="toggleTypeSection('${sec.key}','${t.key}')">
+        <span class="tc">${t.ico}</span>
+        <span class="tn">${t.key}</span>
+        <span class="tcount">${cnt} آلة</span>
+      </div>`;
+    }).join('');
+
+    const activeMachines = activeType ? secMachines.filter(m => m.type === activeType) : [];
+    const machineRows = activeMachines.length ? activeMachines.map(m => `
+      <div class="lrow" style="cursor:pointer" onclick="goToMachSheet('${m.id}')">
+        <div style="flex:1">
+          <strong style="color:var(--brand);text-decoration:underline dotted;font-size:13px">${m.name}</strong>
+          <div class="ss">${assignments.filter(a=>a.machineId===m.id).length} إسناد${sec.key==='rented'?' | كراء أدفعه: '+(m.myRentalCost||0).toLocaleString('fr-FR')+' دج/يوم':''}${m.defaultDriver?' | 👷🏽 '+m.defaultDriver:''}</div>
+        </div>
+        <div style="display:flex;gap:5px" onclick="event.stopPropagation()">
+          <button class="btn btn-light btn-sm" onclick="openEditMach('${m.id}')">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="delMach('${m.id}')">🗑</button>
+        </div>
+      </div>`).join('') : '';
+
+    return `
+      <div style="background:${sec.bg};border:2px solid ${sec.border};border-radius:13px;padding:13px;margin-bottom:12px">
+        <div style="font-weight:800;color:${sec.color};font-size:13px;margin-bottom:10px;display:flex;justify-content:space-between">
+          <span>${sec.label}</span><span style="font-weight:400;font-size:11px">${secMachines.length} آلة</span>
+        </div>
+        <div class="type-cards">${typeCards}</div>
+        <div class="mach-list ${activeType ? 'open' : ''}" id="ml-${sec.key}">
+          ${activeType ? `<div style="font-size:11px;font-weight:700;color:${sec.color};margin-bottom:7px;border-bottom:1px solid ${sec.border};padding-bottom:5px">
+            ${allTypes.find(t=>t.key===activeType)?.ico||'⚙️'} آلات ${activeType} — ${activeMachines.length} آلة
+          </div>${machineRows}` : ''}
+        </div>
+      </div>`;
+  }).join('');
+};
+
+function toggleTypeSection(secKey, typeKey) {
+  if (secKey === 'own') {
+    activeTypeOwn  = activeTypeOwn  === typeKey ? null : typeKey;
+  } else {
+    activeTypeRent = activeTypeRent === typeKey ? null : typeKey;
+  }
+  renderMachLib();
+}
+
+function syncAssignMonth() {
+  const yr = g$('aaYear')?.value || '2026';
+  const mo = g$('aaMonthNum')?.value || '1';
+  const lbl = MN[parseInt(mo)-1] + ' ' + yr;
+  const prev = g$('aaMonthPreview');
+  if (prev) prev.textContent = '📅 ' + lbl;
+}
+
+// ============================================================
+// OVERTIME PAGE
+// ============================================================
+function renderOvertime() {
+  const years = [...new Set(monthList.map(m=>m.k.split('-')[1]))].sort();
+  const oy=g$('otY'), om=g$('otM'), od=g$('otD');
+  const vy=oy.value, vm=om.value, vd=od.value;
+  oy.innerHTML='<option value="">كل السنوات</option>'+years.map(y=>`<option value="${y}" ${y===vy?'selected':''}>${y}</option>`).join('');
+  om.innerHTML='<option value="">كل الأشهر</option>'+MN.map((l,i)=>`<option value="${i+1}" ${String(i+1)===vm?'selected':''}>${l}</option>`).join('');
+
+  const getDriver=a=>a.driver||(gML(a.machineId).defaultDriver)||'';
+  const drivers=[...new Set(assignments.map(a=>getDriver(a)).filter(Boolean))].sort();
+  od.innerHTML='<option value="">كل السائقين</option>'+drivers.map(d=>`<option value="${d}" ${d===vd?'selected':''}>${d}</option>`).join('');
+
+  const filtered = assignments.filter(a => {
+    const [rm,ry] = a.month.split('-');
+    const drv=getDriver(a);
+    return drv
+      && (!vy||ry===vy)
+      && (!vm||rm===vm)
+      && (!vd||drv===vd);
+  });
+
+  const byDriver = {};
+  filtered.forEach(r => {
+    const drv = getDriver(r);
+    if (!byDriver[drv]) byDriver[drv] = { assignments: [] };
+    byDriver[drv].assignments.push(r);
+  });
+
+  let totNorm=0, totExtra=0;
+
+  const cards = Object.entries(byDriver).map(([drv, data]) => {
+    let drvNorm=0, drvExtra=0;
+    const rows = data.assignments.map(r => {
+      const parts=r.month.split('-'), rMo=parseInt(parts[0]), rYr=parseInt(parts[1]);
+      const daysInMonth=new Date(rYr,rMo,0).getDate();
+      let rNorm=0, rExtra=0;
+      const AW=['أحد','اثنين','ثلاثاء','أربعاء','خميس','جمعة','سبت'];
+      const dayDetails=[];
+      r.hours.forEach((h,di)=>{
+        if(di>=daysInMonth) return;
+        h=Number(h||0);
+        const date=new Date(rYr,rMo-1,di+1);
+        const dow=date.getDay();
+        const isFri=(dow===5);
+        const limit=isFri?4:8;
+        const norm=Math.min(h,limit);
+        const extra=Math.max(0,h-limit);
+        if(h>0) dayDetails.push({day:di+1,h,isFri,dow,norm,extra});
+        rNorm+=norm; rExtra+=extra;
+      });
+      drvNorm  += rNorm;
+      drvExtra += rExtra;
+      totNorm  += rNorm;
+      totExtra += rExtra;
+      const ml = gML(r.machineId), s = gS(r.siteId);
+      const detId='det-'+r.id;
+      const dayRows=dayDetails.map(d=>
+        `<tr style="background:${d.isFri?'var(--amber-lt)':''}">
+          <td style="font-size:11px;text-align:center;font-weight:${d.isFri?800:400};color:${d.isFri?'var(--amber-dk)':'inherit'}">
+            ${d.day}<span style="font-size:9px;color:#aaa;display:block">${AW[d.dow]}</span></td>
+          <td style="font-size:11px;color:${d.isFri?'var(--amber-dk)':'inherit'}">${d.isFri?'🟠 جمعة — حد 4h':'يوم عادي — حد 8h'}</td>
+          <td style="font-weight:700;text-align:center">${d.h}h</td>
+          <td style="color:var(--green-dk);text-align:center">${d.norm}h</td>
+          <td style="color:${d.extra?'var(--amber)':'#ccc'};font-weight:${d.extra?800:400};text-align:center">${d.extra?d.extra+'h ⚡':'—'}</td>
+        </tr>`).join('');
+      return `<tr onclick="toggleDetail('${detId}')" style="cursor:pointer">
+        <td style="text-align:right">${r.monthLabel}</td>
+        <td style="text-align:right;color:var(--brand)">${ml.name}</td>
+        <td style="text-align:right">${s.platform} — ${s.region}</td>
+        <td>${rNorm+rExtra}h</td>
+        <td style="color:var(--green-dk);font-weight:700">${rNorm}h</td>
+        <td style="color:${rExtra?'var(--amber)':'#aaa'};font-weight:${rExtra?'800':'400'}">${rExtra?rExtra+'h ⚡':'—'}</td>
+        <td><div style="background:#f0f0f0;border-radius:999px;height:8px;width:60px;overflow:hidden;display:inline-block">
+          <div style="background:var(--amber);height:100%;width:${rNorm+rExtra?Math.round(rExtra/(rNorm+rExtra)*100):0}%;border-radius:999px"></div>
+        </div> <span style="font-size:9px;color:var(--text-muted)">▼</span></td>
+      </tr>
+      <tr id="${detId}" style="display:none"><td colspan="7" style="padding:0">
+        <div style="background:#fafaf8;border:1px solid var(--border-lt);border-radius:8px;margin:4px;overflow:hidden">
+          <table style="width:100%;font-size:11px">
+            <thead style="background:var(--surface2)"><tr>
+              <th>اليوم</th><th>نوع اليوم</th><th>الساعات</th>
+              <th style="color:var(--green-dk)">عادي</th><th style="color:var(--amber)">إضافي ⚡</th>
+            </tr></thead>
+            <tbody>${dayRows}</tbody>
+          </table>
+        </div>
+      </td></tr>`;
+    }).join('');
+
+    return `<div class="panel" style="margin-bottom:10px">
+      <div class="ph" style="background:var(--amber-lt);border-bottom:2px solid #fde68a">
+        <div>
+          <h2 style="color:var(--amber-dk)">👷 ${drv}</h2>
+          <div class="sub">${data.assignments.length} آلة | ساعات عادية: <strong>${drvNorm}h</strong> | إضافية: <strong style="color:${drvExtra?'var(--amber)':'#aaa'}">${drvExtra||'لا يوجد'}</strong></div>
+        </div>
+        <div style="text-align:left">
+          <div style="font-size:22px;font-weight:800;color:var(--amber)">${drvExtra}h</div>
+          <div style="font-size:10px;color:var(--text-muted)">ساعات إضافية</div>
+        </div>
+      </div>
+      <div class="pb">
+        <div class="tw" style="max-height:none"><table>
+          <thead><tr>
+            <th style="text-align:right">الشهر</th>
+            <th style="text-align:right">الآلة</th>
+            <th style="text-align:right">الموقع</th>
+            <th>إجمالي ساعات</th>
+            <th style="color:var(--green-dk)">عادية</th>
+            <th style="color:var(--amber)">إضافية</th>
+            <th>نسبة الإضافي</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+          <tfoot><tr>
+            <th colspan="3" style="text-align:right">مجموع ${drv}</th>
+            <th>${drvNorm+drvExtra}</th>
+            <th style="color:var(--green-dk)">${drvNorm}</th>
+            <th style="color:var(--amber);font-weight:800">${drvExtra}</th>
+            <th></th>
+          </tr></tfoot>
+        </table></div>
+      </div>
+    </div>`;
+  });
+
+  g$('otDriverCards').innerHTML = cards.length ? cards.join('') :
+    `<div class="empty"><div class="ico">👷</div><h3>لا توجد بيانات سائقين</h3>
+     <p>أضف اسم السائق عند إسناد الآلة</p></div>`;
+
+  const drvCount = Object.keys(byDriver).length;
+  g$('otDrv').textContent    = drvCount;
+  g$('otNorm').textContent   = totNorm + 'h';
+  g$('otExtra').textContent  = totExtra + 'h';
+  g$('otRate').textContent   = (totNorm+totExtra) ? Math.round(totExtra/(totNorm+totExtra)*100)+'%' : '0%';
+}
+
+const _gtOrig3 = goTo;
+goTo = function(id, btn) {
+  _gtOrig3(id, btn);
+  if (id === 'overtimePage') renderOvertime();
+};
+
+function toggleDetail(id){
+  const el=document.getElementById(id);
+  if(el) el.style.display=el.style.display==='none'?'table-row':'none';
+}
+
+// ============================================================
+// UNSAVED CHANGES WARNING
+// ============================================================
+let hasUnsaved = false;
+
+function markUnsaved() { hasUnsaved = true; updateSaveBtn(); }
+function markSaved()   { hasUnsaved = false; updateSaveBtn(); }
+
+function updateSaveBtn() {
+  const btn = document.querySelector('button[onclick="saveData()"]');
+  if (!btn) return;
+  if (hasUnsaved) {
+    btn.style.background = 'var(--amber)';
+    btn.style.color = '#fff';
+    btn.textContent = '💾 حفظ (تغييرات معلقة)';
+    btn.style.animation = 'pulse 1.5s infinite';
+  } else {
+    btn.style.background = '';
+    btn.style.color = '';
+    btn.textContent = '💾 حفظ';
+    btn.style.animation = '';
+  }
+}
+
+const _fnNames = ['upH','upP','fillRow','togglePaid','delA','saveAssign','saveSite','saveMgr','saveMach','saveEditMach','saveMonth'];
+_fnNames.forEach(fn => {
+  const orig = window[fn];
+  if (typeof orig === 'function') {
+    window[fn] = function() { markUnsaved(); return orig.apply(this, arguments); };
+  }
+});
+
+const _origSaveData = window.saveData;
+window.saveData = function() {
+  if (_origSaveData) _origSaveData();
+  markSaved();
+};
+
+window.addEventListener('beforeunload', function(e) {
+  if (hasUnsaved) {
+    e.preventDefault();
+    e.returnValue = 'لديك تغييرات غير محفوظة — هل تريد المغادرة دون حفظ؟';
+    return e.returnValue;
+  }
+});
+
+
+// ============================================================
+// LOCK SYSTEM  (password: 1234)
+// ============================================================
+var APP_LOCKED = true;
+var LOCK_PW = '1234';
+
+function applyLock() {
+  var locked = APP_LOCKED;
+  // Disable ALL inputs and selects inside the page (except filters and lock input)
+  document.querySelectorAll('input, select, textarea, button').forEach(function(el){
+    if (el.id === 'lockIndicator' || el.id === 'lockPwInput' || el.id === 'lockSubmitBtn') return;
+    if (el.id && ['fT','fR','fP','fMg','fQ','selY','selM','otY','otM','otD','pfMonth1','pfMonth2','pfSite1','pfSite2'].indexOf(el.id) >= 0) return;
+    if (el.classList.contains('arr')) return;
+    if (el.onclick && el.onclick.toString().indexOf('shiftM') >= 0) return;
+    el.disabled = locked;
+    el.style.opacity = locked ? '0.45' : '';
+    el.style.pointerEvents = locked ? 'none' : '';
+    el.style.cursor = (locked && el.tagName === 'BUTTON') ? 'not-allowed' : '';
+  });
+  var ind = document.getElementById('lockIndicator');
+  if (ind) {
+    ind.disabled = false;
+    ind.style.opacity = '';
+    ind.style.pointerEvents = '';
+    ind.style.cursor = 'pointer';
+    ind.innerHTML = locked ? '🔒 مقفل' : '🔓 مفتوح';
+    ind.style.background   = locked ? '#fee2e2' : '#dcfce7';
+    ind.style.borderColor  = locked ? '#fca5a5' : '#86efac';
+    ind.style.color        = locked ? '#dc2626' : '#14532d';
+  }
+}
+
+function toggleLock() {
+  if (!APP_LOCKED) {
+    APP_LOCKED = true;
+    applyLock();
+    showToast('🔒 تم قفل التعديلات');
+  } else {
+    document.getElementById('lockPwInput').value = '';
+    document.getElementById('lockErrMsg').textContent = '';
+    document.getElementById('lockOverlay').classList.add('open');
+    setTimeout(function(){ document.getElementById('lockPwInput').focus(); }, 150);
+  }
+}
+
+function submitLock() {
+  var val = document.getElementById('lockPwInput').value;
+  if (val === LOCK_PW) {
+    document.getElementById('lockOverlay').classList.remove('open');
+    APP_LOCKED = false;
+    applyLock();
+    showToast('🔓 تم فتح التعديلات');
+  } else {
+    var inp = document.getElementById('lockPwInput');
+    document.getElementById('lockErrMsg').textContent = '❌ كلمة المرور غير صحيحة';
+    inp.value = '';
+    inp.classList.add('pw-shake');
+    setTimeout(function(){ inp.classList.remove('pw-shake'); }, 360);
+  }
+}
+
+// Re-apply lock after every render rebuild
+(function(){
+  var _r = render;
+  render = function(){ _r(); setTimeout(applyLock, 60); };
+})();
+
+window.addEventListener('load', function(){ applyLock(); });
+
+// ============================================================
+// PRINT MONTHLY TABLE ONLY
+// ============================================================
+function printMonthlyTable() {
+  var tbl = document.querySelector('#dashboard .tw table');
+  if (!tbl) { alert('لا يوجد جدول للطباعة'); return; }
+  var selM = document.getElementById('selM');
+  var selY = document.getElementById('selY');
+  var month = selM ? selM.options[selM.selectedIndex].text : '';
+  var year  = selY ? selY.value : '';
+
+  // Clone and clean: replace inputs with plain spans
+  var clone = tbl.cloneNode(true);
+  clone.querySelectorAll('input').forEach(function(inp) {
+    var span = document.createElement('span');
+    span.textContent = inp.value || '';
+    inp.parentNode.replaceChild(span, inp);
+  });
+  clone.querySelectorAll('button').forEach(function(b){ b.remove(); });
+  // Remove sticky positioning from cloned table
+  clone.querySelectorAll('th,td').forEach(function(el){
+    el.style.position = 'static';
+  });
+
+  var win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>جدول الآلات - ${month} ${year}</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: Cairo, sans-serif;
+    background: #fff;
+    color: #1a1714;
+    padding: 8mm;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .print-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 2.5px solid #0a5c60;
+  }
+  .print-header h1 { font-size: 13px; font-weight: 900; color: #0a5c60; }
+  .print-header span { font-size: 9px; color: #7a7268; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: auto;
+  }
+  th {
+    background: #0a5c60 !important;
+    color: #fff !important;
+    padding: 4px 2px;
+    font-size: 7.5px;
+    font-weight: 700;
+    white-space: nowrap;
+    text-align: center;
+    border: 1px solid #073f42;
+  }
+  td {
+    border: 1px solid #ddd8cf;
+    padding: 2.5px 1.5px;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: middle;
+    font-size: 7.5px;
+  }
+  tr:nth-child(even) td { background: #f5f2ec !important; }
+  tfoot td, tfoot th {
+    background: #edeae2 !important;
+    font-weight: 800;
+    font-size: 7.5px;
+    border: 1px solid #ccc;
+  }
+  /* First 2 sticky columns */
+  td:nth-child(1), th:nth-child(1) { text-align: right; min-width: 85px; max-width: 100px; white-space: normal; word-break: break-word; }
+  td:nth-child(2), th:nth-child(2) { text-align: right; min-width: 75px; max-width: 90px; white-space: normal; word-break: break-word; }
+  .mname { font-weight: 800; font-size: 8px; color: #0a5c60; line-height: 1.3; }
+  .ss    { font-size: 7px; color: #7a7268; line-height: 1.3; }
+  .agg   { background: #f0ede5 !important; font-weight: 700; }
+  .gh    { background: #e6f4f4 !important; color: #073f42; font-weight: 800; font-size: 8px; text-align: right; padding: 3px 8px; }
+
+  /* Hour cell colors */
+  .c0 { background: #fee2e2 !important; }
+  .c0 span { color: #dc2626; font-weight: 700; }
+  .cp { background: #d1fae5 !important; }
+  .cp span { color: #14532d; font-weight: 700; }
+  .cf { background: #a7f3d0 !important; }
+  .cf span { color: #14532d; font-weight: 800; }
+  .cx { background: #dbeafe !important; }
+  .cx span { color: #1e3a8a; font-weight: 800; }
+
+  /* Friday columns */
+  th[style*="fef3c7"], td[style*="fef3c7"] {
+    background: #fef3c7 !important;
+  }
+
+  @page { size: A4 landscape; margin: 6mm; }
+  @media print {
+    body { padding: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="print-header">
+  <h1>📋 جدول الآلات الشهري &mdash; ${month} ${year}</h1>
+  <span>طُبع بتاريخ: ` + new Date().toLocaleDateString('ar-DZ') + `</span>
+</div>
+` + clone.outerHTML + `
+<script>
+  window.onload = function() {
+    window.print();
+    window.onafterprint = function() { window.close(); };
+  };
+<\/script>
+</body>
+</html>`);
+  win.document.close();
+}
+
+// ══════════════════════════════════════
+// V3 PRO — ENHANCEMENTS
+// ══════════════════════════════════════
+
+// Dark Mode
+let _dark = false;
+function toggleTheme() {
+  _dark = !_dark;
+  document.documentElement.setAttribute('data-theme', _dark ? 'dark' : 'light');
+  const b = document.getElementById('themeToggle');
+  if (b) b.textContent = _dark ? '☀️' : '🌙';
+  setTimeout(buildCharts, 130);
+}
+(function () {
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme:dark)').matches) {
+    _dark = true;
+    document.documentElement.setAttribute('data-theme', 'dark');
+    window.addEventListener('load', function () {
+      const b = document.getElementById('themeToggle');
+      if (b) b.textContent = '☀️';
+    });
+  }
+})();
+
+// Save Indicator
+function _dot(u) {
+  const d = document.getElementById('saveDot'), l = document.getElementById('saveStatus');
+  if (!d) return;
+  d.style.background = u ? 'var(--amber)' : 'var(--green)';
+  d.style.animation = u ? 'pulse 1.5s infinite' : '';
+  if (l) l.textContent = u ? 'تغييرات معلّقة' : 'محفوظ';
+}
+(function () {
+  const os = window.saveData;
+  window.saveData = function () { if (os) os.apply(this, arguments); _dot(false); };
+  ['upH','upP','fillRow','togglePaid','delA','saveAssign','saveSite','saveMgr','saveMach','saveEditMach','saveMonth'].forEach(function(fn) {
+    const o = window[fn];
+    if (typeof o === 'function') window[fn] = function () { _dot(true); return o.apply(this, arguments); };
+  });
+})();
+
+// CSV Export
+function exportCSV(type) {
+  var rows = [], fn = '';
+  var h = ['الآلة','الصاحب','الموقع','المنطقة','الشهر','الصافي'];
+  if (type === 'paid') {
+    fn = 'مدفوع.csv'; rows.push(h);
+    assignments.filter(function(a){return a.paid;}).forEach(function(a){
+      var ml=gML(a.machineId),s=gS(a.siteId),t=tT(a);
+      rows.push([ml.name,a.owner,s.platform,s.region,a.monthLabel,t.n]);
+    });
+  } else if (type === 'pend') {
+    fn = 'معلق.csv'; rows.push(h);
+    assignments.filter(function(a){return !a.paid;}).forEach(function(a){
+      var ml=gML(a.machineId),s=gS(a.siteId),t=tT(a);
+      rows.push([ml.name,a.owner,s.platform,s.region,a.monthLabel,t.n]);
+    });
+  }
+  if (!rows.length) { showToast('لا توجد بيانات للتصدير'); return; }
+  var csv = '\uFEFF' + rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+  a.download = fn; a.click();
+  showToast('✅ تم تصدير ' + (rows.length-1) + ' صف');
+}
+
+// Charts
+var _mc = null, _tc = null;
+function buildCharts() {
+  if (typeof Chart === 'undefined') return;
+  var dk = document.documentElement.getAttribute('data-theme') === 'dark';
+  var gc = dk ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.05)';
+  var lc = dk ? '#6b6880' : '#8884a0';
+  var bc = dk ? '#2dd4bf' : '#0d7377';
+  var ac = dk ? '#fb923c' : '#f4a261';
+
+  var mc = document.getElementById('monthlyChart');
+  if (mc) {
+    if (_mc) _mc.destroy();
+    var bm = {};
+    assignments.forEach(function(a){var t=tT(a);bm[a.monthLabel]=(bm[a.monthLabel]||0)+t.n;});
+    var lbs = Object.keys(bm).slice(-8);
+    _mc = new Chart(mc, {
+      type: 'bar',
+      data: { labels: lbs, datasets: [{ label: 'الصافي (دج)', data: lbs.map(function(l){return bm[l];}), backgroundColor: bc+'bb', borderColor: bc, borderWidth: 1.5, borderRadius: 6, borderSkipped: false }]},
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{callbacks:{label:function(c){return ' '+c.parsed.y.toLocaleString()+' دج';}}}},
+        scales:{
+          x:{ticks:{color:lc,font:{family:'Cairo',size:10}},grid:{color:gc},border:{dash:[3,3]}},
+          y:{ticks:{color:lc,font:{family:'Cairo',size:10},callback:function(v){return (v/1000).toFixed(0)+'k';}},grid:{color:gc},border:{dash:[3,3]}}
+        }
+      }
+    });
+  }
+
+  var tc = document.getElementById('typeChart');
+  if (tc) {
+    if (_tc) _tc.destroy();
+    var bt = {};
+    machineLib.forEach(function(m){bt[m.type]=(bt[m.type]||0)+1;});
+    var tl = Object.keys(bt);
+    if (!tl.length) return;
+    var cols = ['#0d7377','#f4a261','#10b981','#3b82f6','#8b5cf6','#f59e0b','#ef4444','#0891b2'];
+    _tc = new Chart(tc, {
+      type: 'doughnut',
+      data:{ labels:tl, datasets:[{data:tl.map(function(t){return bt[t];}),backgroundColor:cols,borderWidth:2,borderColor:dk?'#1a1825':'#fff',hoverBorderWidth:3}]},
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{position:'right',labels:{color:lc,font:{family:'Cairo',size:10},boxWidth:10,padding:10}},
+          tooltip:{callbacks:{label:function(c){return ' '+c.label+': '+c.parsed+' آلة';}}}
+        },
+        cutout:'62%'
+      }
+    });
+  }
+}
+(function(){
+  var og = window.goTo;
+  window.goTo = function(id,btn){if(og)og.apply(this,arguments);if(id==='dashboard')setTimeout(buildCharts,220);};
+})();
+window.addEventListener('load', function(){ setTimeout(buildCharts, 500); });
+
+// Command Palette
+var _CMDS = [
+  {i:'📋',l:'ورقة الشهر',s:'الجدول الشهري للآلات',p:'dashboard'},
+  {i:'🏗',l:'مكتبة الآلات',s:'إدارة وتصفح الآلات',p:'machineLib'},
+  {i:'📝',l:'إسناد آلة',s:'إضافة إسناد جديد',a:function(){openM('mAssign');}},
+  {i:'📍',l:'المواقع',s:'إدارة المواقع والمنشآت',p:'sitesPage'},
+  {i:'📅',l:'الأشهر',s:'إدارة فترات الأشهر',p:'monthsPage'},
+  {i:'💰',l:'المدفوعات',s:'متابعة الفواتير',p:'paymentsPage'},
+  {i:'⏱',l:'الساعات الإضافية',s:'تقرير السائقين',p:'overtimePage'},
+  {i:'📊',l:'التقارير',s:'تقارير مفصّلة',p:'reportsPage'},
+  {i:'⚙️',l:'الإعدادات',s:'تخصيص النظام',p:'settingsPage'},
+  {i:'💾',l:'حفظ البيانات',s:'Ctrl+S',a:function(){saveData();}},
+  {i:'🌙',l:'وضع ليلي/نهاري',s:'تغيير المظهر',a:function(){toggleTheme();}},
+  {i:'🖨',l:'طباعة الجدول',s:'طباعة',a:function(){window.print();}},
+];
+var _ci = 0;
+function openCmd(){
+  document.getElementById('cmdOverlay').classList.add('open');
+  var i = document.getElementById('cmdInput');
+  i.value=''; renderCmd('');
+  setTimeout(function(){i.focus();},50);
+}
+function closeCmd(){ document.getElementById('cmdOverlay').classList.remove('open'); }
+function renderCmd(q){
+  var fl = q ? _CMDS.filter(function(c){return c.l.includes(q)||c.s.includes(q);}) : _CMDS;
+  _ci=0; document._cf=fl;
+  document.getElementById('cmdResults').innerHTML = fl.map(function(c,i){
+    return '<div class="cmd-item'+(i===0?' sel':'')+'" onclick="_exCmd('+_CMDS.indexOf(c)+')">'
+      +'<span class="ci">'+c.i+'</span>'
+      +'<div><div class="ct">'+c.l+'</div><div class="cs">'+c.s+'</div></div>'
+      +'</div>';
+  }).join('');
+}
+function _exCmd(idx){
+  var c=_CMDS[idx]; closeCmd();
+  if(c.a) c.a();
+  else if(c.p){var b=document.querySelector('.nav button[onclick*="'+c.p+'"]');goTo(c.p,b);}
+}
+document.addEventListener('keydown',function(e){
+  if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();openCmd();return;}
+  if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();saveData();return;}
+  var ov=document.getElementById('cmdOverlay');
+  if(!ov||!ov.classList.contains('open')) return;
+  if(e.key==='Escape'){closeCmd();return;}
+  var its=document.querySelectorAll('.cmd-item');
+  if(e.key==='ArrowDown') _ci=Math.min(_ci+1,its.length-1);
+  if(e.key==='ArrowUp')   _ci=Math.max(_ci-1,0);
+  its.forEach(function(el,i){el.classList.toggle('sel',i===_ci);});
+  if(e.key==='Enter'&&its[_ci]) its[_ci].click();
+});
+
+</script>
